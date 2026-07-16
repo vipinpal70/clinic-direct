@@ -1,0 +1,245 @@
+// Clinic Direct Admin — Prisma schema (MongoDB)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ────────────────────────────────────────────────────
+
+enum ClinicStatus {
+  active
+  pending
+  suspended
+  inactive
+}
+
+enum AgreementStatus {
+  not_sent
+  sent
+  viewed
+  accepted
+}
+
+enum OrderStatus {
+  pending
+  processing
+  fulfilled
+  refunded
+  cancelled
+}
+
+enum CommissionStatus {
+  payable
+  approved
+  paid
+  cancelled
+}
+
+enum InvoiceStatus {
+  draft
+  issued
+  pushed
+  paid
+  voided
+}
+
+enum UserRole {
+  super_admin
+  admin
+  finance
+  support
+  read_only
+}
+
+enum UserStatus {
+  active
+  invited
+  suspended
+}
+
+// ─── Models ───────────────────────────────────────────────────
+
+model Clinic {
+  id              String          @id @default(auto()) @map("_id") @db.ObjectId
+  name            String
+  code            String          @unique
+  email           String
+  phone           String?
+  status          ClinicStatus    @default(pending)
+  agreement       AgreementStatus @default(not_sent)
+  commissionPct   Float           @default(12)
+  joined          DateTime        @default(now())
+  address         String?
+  website         String?
+  notes           String?
+  loginEmail      String?
+  loginHash       String?         // bcrypt hash of portal password
+
+  orders          Order[]
+  commissions     Commission[]
+  invoices        Invoice[]
+
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@map("clinics")
+}
+
+model Order {
+  id              String      @id @default(auto()) @map("_id") @db.ObjectId
+  shopifyId       String      @unique
+  number          String
+  clinicId        String      @db.ObjectId
+  clinic          Clinic      @relation(fields: [clinicId], references: [id])
+  status          OrderStatus @default(pending)
+  total           Float
+  commission      Float
+  commissionPct   Float
+  items           Int         @default(1)
+  customerName    String?
+  customerEmail   String?
+  lineItems       Json?       // Raw Shopify line items
+  refundAmount    Float?
+  notes           String?
+  shopifyCreatedAt DateTime
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  @@index([clinicId])
+  @@index([status])
+  @@index([shopifyCreatedAt])
+  @@map("orders")
+}
+
+model Commission {
+  id              String           @id @default(auto()) @map("_id") @db.ObjectId
+  clinicId        String           @db.ObjectId
+  clinic          Clinic           @relation(fields: [clinicId], references: [id])
+  period          String           // "2026-07"
+  gross           Float
+  commission      Float
+  rate            Float
+  vat             Float            @default(0)
+  status          CommissionStatus @default(payable)
+  invoiceId       String?          @db.ObjectId
+  notes           String?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  @@index([clinicId])
+  @@index([period])
+  @@index([status])
+  @@map("commissions")
+}
+
+model Invoice {
+  id              String        @id @default(auto()) @map("_id") @db.ObjectId
+  number          String        @unique
+  clinicId        String        @db.ObjectId
+  clinic          Clinic        @relation(fields: [clinicId], references: [id])
+  commission      Float
+  vat             Float
+  total           Float
+  status          InvoiceStatus @default(draft)
+  periodStart     DateTime?
+  periodEnd       DateTime?
+  pushedAt        DateTime?     // When pushed to Orderwise
+  paidAt          DateTime?
+  notes           String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([clinicId])
+  @@index([status])
+  @@map("invoices")
+}
+
+model CommissionRule {
+  id              String   @id @default(auto()) @map("_id") @db.ObjectId
+  scope           String   // "default" | "product:{id}" | "clinic:{id}" | "category:{slug}"
+  scopeLabel      String   // Human-readable label
+  basis           String   // "percentage" | "fixed"
+  value           Float    // Percentage or fixed amount
+  appliesToLabel  String
+  priority        Int      @default(0)
+  active          Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([active])
+  @@map("commission_rules")
+}
+
+model AdminUser {
+  id              String     @id @default(auto()) @map("_id") @db.ObjectId
+  name            String
+  email           String     @unique
+  passwordHash    String
+  role            UserRole   @default(read_only)
+  twoFaSecret     String?
+  twoFaEnabled    Boolean    @default(false)
+  status          UserStatus @default(invited)
+  lastLoginAt     DateTime?
+  invitedAt       DateTime?
+  invitedBy       String?    @db.ObjectId
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  auditLogs       AuditLog[]
+
+  @@map("admin_users")
+}
+
+model AuditLog {
+  id              String    @id @default(auto()) @map("_id") @db.ObjectId
+  userId          String?   @db.ObjectId
+  user            AdminUser? @relation(fields: [userId], references: [id])
+  userEmail       String
+  action          String    // e.g. "clinic.approved", "order.synced"
+  target          String    // What was acted on
+  prevValue       String?
+  newValue        String?
+  ipAddress       String?
+  metadata        Json?
+  createdAt       DateTime  @default(now())
+
+  @@index([userEmail])
+  @@index([action])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+model IntegrationConfig {
+  id              String   @id @default(auto()) @map("_id") @db.ObjectId
+  provider        String   @unique // "shopify" | "orderwise" | "clarity"
+  config          Json     // Encrypted credentials and settings
+  active          Boolean  @default(true)
+  lastSyncAt      DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("integration_configs")
+}
+
+model WebhookLog {
+  id              String   @id @default(auto()) @map("_id") @db.ObjectId
+  provider        String   // "shopify"
+  event           String   // "orders/create"
+  resourceId      String
+  attempts        Int      @default(1)
+  status          String   // "success" | "failed" | "retrying"
+  payload         Json?
+  error           String?
+  processedAt     DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([provider])
+  @@index([status])
+  @@map("webhook_logs")
+}
