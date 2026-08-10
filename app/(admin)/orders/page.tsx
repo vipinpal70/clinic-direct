@@ -1,13 +1,17 @@
-import { Download, Filter, Search, ShoppingBag } from "lucide-react";
+import { Suspense } from "react";
+import { Download, ShoppingBag } from "lucide-react";
+import { Prisma } from "@prisma/client";
 import { PageHeader, PageBody } from "@/components/shared/page-header";
 import { SectionCard } from "@/components/shared/section-card";
 import { StatCard } from "@/components/shared/stat-card";
 import { StatusPill } from "@/components/shared/status-pill";
 import { Button } from "@/components/ui/button";
-import { orders } from "@/lib/mock";
+import { prisma } from "@/lib/prisma";
 import { currency, relativeTime } from "@/lib/utils";
+import { OrderFilters } from "./order-filters";
 
 export const metadata = { title: "Orders" };
+export const dynamic = "force-dynamic";
 
 const statusTone: Record<
   string,
@@ -20,14 +24,38 @@ const statusTone: Record<
   cancelled: "muted",
 };
 
-export default function OrdersPage() {
-  const fulfilled = orders.filter((o) => o.status === "fulfilled").length;
-  const totalRevenue = orders
-    .filter((o) => o.status !== "refunded" && o.status !== "cancelled")
-    .reduce((a, o) => a + o.total, 0);
-  const totalCommission = orders
-    .filter((o) => o.status !== "refunded" && o.status !== "cancelled")
-    .reduce((a, o) => a + o.commission, 0);
+interface Props {
+  searchParams: Promise<{ search?: string; status?: string; clinicId?: string }>;
+}
+
+export default async function OrdersPage({ searchParams }: Props) {
+  const { search, status, clinicId } = await searchParams;
+
+  const where: Prisma.OrderWhereInput = {};
+  if (status) where.status = status as Prisma.OrderWhereInput["status"];
+  if (clinicId) where.clinicId = clinicId;
+  if (search) {
+    where.OR = [
+      { number: { contains: search, mode: "insensitive" } },
+      { customerName: { contains: search, mode: "insensitive" } },
+    ];
+  }
+
+  const [orders, clinics, totalCount, fulfilledCount, activeAgg] = await Promise.all([
+    prisma.order.findMany({
+      where,
+      include: { clinic: { select: { name: true, code: true } } },
+      orderBy: { shopifyCreatedAt: "desc" },
+      take: 100,
+    }),
+    prisma.clinic.findMany({ select: { id: true, name: true, code: true }, orderBy: { name: "asc" } }),
+    prisma.order.count(),
+    prisma.order.count({ where: { status: "fulfilled" } }),
+    prisma.order.aggregate({
+      where: { status: { notIn: ["refunded", "cancelled"] } },
+      _sum: { total: true, commission: true },
+    }),
+  ]);
 
   return (
     <>
@@ -35,9 +63,12 @@ export default function OrdersPage() {
         title="Orders"
         description="All Shopify orders across all clinic codes."
         actions={
-          <Button variant="outline" size="sm">
-            <Download className="h-4 w-4" />
-            Export
+          <Button variant="outline" size="sm" asChild>
+            {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- file download, not a page navigation */}
+            <a href="/api/orders/export">
+              <Download className="h-4 w-4" />
+              Export
+            </a>
           </Button>
         }
       />
@@ -45,51 +76,27 @@ export default function OrdersPage() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <StatCard
             label="Total orders"
-            value={orders.length}
+            value={totalCount}
             hint="All time"
             icon={<ShoppingBag className="h-4 w-4" />}
           />
-          <StatCard
-            label="Fulfilled"
-            value={fulfilled}
-            hint="Shipped"
-            delta={{ value: "+8.2%", positive: true }}
-          />
+          <StatCard label="Fulfilled" value={fulfilledCount} hint="Shipped" />
           <StatCard
             label="Gross revenue"
-            value={currency(totalRevenue)}
+            value={currency(activeAgg._sum.total ?? 0)}
             hint="Excl. refunds"
           />
           <StatCard
             label="Total commission"
-            value={currency(totalCommission)}
+            value={currency(activeAgg._sum.commission ?? 0)}
             hint="All active orders"
           />
         </div>
 
         <SectionCard title="All orders">
-          {/* Toolbar */}
-          <div className="flex items-center gap-2 px-5 py-3 border-b border-border flex-wrap">
-            <div className="relative flex-1 min-w-[200px] max-w-sm">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-              <input
-                placeholder="Search orders, clinics…"
-                className="h-8 w-full rounded-md border border-input bg-background pl-8 pr-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/40"
-              />
-            </div>
-            <Button variant="outline" size="sm">
-              <Filter className="h-3.5 w-3.5" />
-              Status
-            </Button>
-            <Button variant="outline" size="sm">
-              <Filter className="h-3.5 w-3.5" />
-              Clinic
-            </Button>
-            <Button variant="outline" size="sm">
-              <Filter className="h-3.5 w-3.5" />
-              Date range
-            </Button>
-          </div>
+          <Suspense fallback={null}>
+            <OrderFilters clinics={clinics} />
+          </Suspense>
 
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -106,6 +113,13 @@ export default function OrdersPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
+                {orders.length === 0 && (
+                  <tr>
+                    <td colSpan={8} className="py-12 text-center text-sm text-muted-foreground">
+                      No orders match your filters.
+                    </td>
+                  </tr>
+                )}
                 {orders.map((o) => (
                   <tr key={o.id} className="hover:bg-muted/40 transition-colors">
                     <td className="px-5 py-2.5">
@@ -113,11 +127,11 @@ export default function OrdersPage() {
                         {o.number}
                       </span>
                     </td>
-                    <td className="py-2.5">{o.customer}</td>
+                    <td className="py-2.5">{o.customerName ?? "—"}</td>
                     <td className="py-2.5">
-                      <div className="text-xs font-medium">{o.clinicCode}</div>
+                      <div className="text-xs font-medium">{o.clinic.code}</div>
                       <div className="text-[11px] text-muted-foreground">
-                        {o.clinicName}
+                        {o.clinic.name}
                       </div>
                     </td>
                     <td className="py-2.5 tabular-nums">{o.items}</td>
@@ -133,7 +147,7 @@ export default function OrdersPage() {
                       </StatusPill>
                     </td>
                     <td className="py-2.5 pr-5 text-xs text-muted-foreground">
-                      {relativeTime(o.createdAt)}
+                      {relativeTime(o.shopifyCreatedAt)}
                     </td>
                   </tr>
                 ))}

@@ -1,12 +1,15 @@
-import { Plus, Shield } from "lucide-react";
+import { Shield } from "lucide-react";
+import { getSessionFromCookies } from "@/lib/session";
 import { PageHeader, PageBody } from "@/components/shared/page-header";
 import { SectionCard } from "@/components/shared/section-card";
 import { StatusPill } from "@/components/shared/status-pill";
-import { Button } from "@/components/ui/button";
-import { adminUsers } from "@/lib/mock";
+import { prisma } from "@/lib/prisma";
 import { initials, relativeTime } from "@/lib/utils";
+import { InviteUserDialog } from "./invite-user-dialog";
+import { ManageUserMenu } from "./manage-user-menu";
 
 export const metadata = { title: "Users & roles" };
+export const dynamic = "force-dynamic";
 
 const ROLE_LABEL: Record<string, string> = {
   super_admin: "Admin",
@@ -24,18 +27,18 @@ const ROLE_TONE: Record<string, "info" | "success" | "warning" | "muted"> = {
   read_only: "muted",
 };
 
-export default function UsersPage() {
+export default async function UsersPage() {
+  const [session, adminUsers] = await Promise.all([
+    getSessionFromCookies(),
+    prisma.adminUser.findMany({ orderBy: { createdAt: "desc" } }),
+  ]);
+
   return (
     <>
       <PageHeader
         title="Users & roles"
         description="All platform users. Role is a label — every account has full access."
-        actions={
-          <Button size="sm">
-            <Plus className="h-4 w-4" />
-            Invite user
-          </Button>
-        }
+        actions={<InviteUserDialog />}
       />
       <PageBody>
         <SectionCard
@@ -79,7 +82,7 @@ export default function UsersPage() {
 
                     {/* 2FA */}
                     <td className="py-3">
-                      {u.twoFa ? (
+                      {u.twoFaEnabled ? (
                         <span className="flex items-center gap-1 text-xs text-success">
                           <Shield className="h-3.5 w-3.5" /> On
                         </span>
@@ -105,12 +108,16 @@ export default function UsersPage() {
 
                     {/* Last active */}
                     <td className="py-3 text-xs text-muted-foreground tabular-nums">
-                      {relativeTime(u.lastActive)}
+                      {u.lastLoginAt ? relativeTime(u.lastLoginAt) : "Never"}
                     </td>
 
                     {/* Actions */}
                     <td className="py-3 pr-5 text-right">
-                      <Button variant="outline" size="sm">Manage</Button>
+                      <ManageUserMenu
+                        userId={u.id}
+                        status={u.status}
+                        isSelf={u.id === session?.user.id}
+                      />
                     </td>
                   </tr>
                 ))}

@@ -1,6 +1,6 @@
 "use client";
 
-import { Bell, Search, Command, Menu } from "lucide-react";
+import { Search, Command, Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export function TopBar() {
@@ -32,10 +32,10 @@ export function TopBar() {
           </div>
 
           {/* Notifications */}
-          <Button variant="ghost" size="icon" className="relative">
+          {/* <Button variant="ghost" size="icon" className="relative">
             <Bell className="h-4 w-4" />
             <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-destructive" />
-          </Button>
+          </Button> */}
         </div>
       </div>
     </header>

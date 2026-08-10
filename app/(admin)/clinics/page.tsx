@@ -1,22 +1,20 @@
-import {
-  Building2,
-  Plus,
-  Search,
-  Download,
-  Upload,
-  Filter,
-} from "lucide-react";
+import { Suspense } from "react";
+import { Building2 } from "lucide-react";
 import Link from "next/link";
 import { PageHeader, PageBody } from "@/components/shared/page-header";
 import { SectionCard } from "@/components/shared/section-card";
 import { StatCard } from "@/components/shared/stat-card";
 import { StatusPill } from "@/components/shared/status-pill";
 import { Button } from "@/components/ui/button";
-import { clinics } from "@/lib/mock";
+import { getClinicsWithStats } from "@/lib/stats";
 import { currency, dateFmt } from "@/lib/utils";
 import type { ClinicStatus } from "@/types";
+import { AddClinicDialog } from "./add-clinic-dialog";
+import { ClinicFilters } from "./clinic-filters";
+import { ImportExportButtons } from "./import-export-buttons";
 
 export const metadata = { title: "Clinics" };
+export const dynamic = "force-dynamic";
 
 const statusTone: Record<ClinicStatus, "success" | "warning" | "destructive" | "muted"> = {
   active: "success",
@@ -25,10 +23,29 @@ const statusTone: Record<ClinicStatus, "success" | "warning" | "destructive" | "
   inactive: "muted",
 };
 
-export default function ClinicsPage() {
-  const active = clinics.filter((c) => c.status === "active");
-  const pending = clinics.filter((c) => c.status === "pending");
-  const totalRevenue = clinics.reduce((a, c) => a + c.monthSales, 0);
+interface Props {
+  searchParams: Promise<{ search?: string; status?: string }>;
+}
+
+export default async function ClinicsPage({ searchParams }: Props) {
+  const { search, status } = await searchParams;
+  const allClinics = await getClinicsWithStats();
+
+  const active = allClinics.filter((c) => c.status === "active");
+  const pending = allClinics.filter((c) => c.status === "pending");
+  const totalRevenue = allClinics.reduce((a, c) => a + c.monthSales, 0);
+
+  let clinics = allClinics;
+  if (status) clinics = clinics.filter((c) => c.status === status);
+  if (search) {
+    const q = search.toLowerCase();
+    clinics = clinics.filter(
+      (c) =>
+        c.name.toLowerCase().includes(q) ||
+        c.code.toLowerCase().includes(q) ||
+        c.email.toLowerCase().includes(q),
+    );
+  }
 
   return (
     <>
@@ -37,49 +54,24 @@ export default function ClinicsPage() {
         description="All registered clinics and their portal links, orders and commission status."
         actions={
           <>
-            <Button variant="outline" size="sm">
-              <Upload className="h-4 w-4" />
-              Import
-            </Button>
-            <Button variant="outline" size="sm">
-              <Download className="h-4 w-4" />
-              Export
-            </Button>
-            <Button size="sm">
-              <Plus className="h-4 w-4" />
-              Add clinic
-            </Button>
+            <ImportExportButtons />
+            <AddClinicDialog />
           </>
         }
       />
       <PageBody>
         {/* KPIs */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <StatCard label="Total clinics" value={clinics.length} hint="All registered" icon={<Building2 className="h-4 w-4" />} />
-          <StatCard label="Active" value={active.length} hint="Generating orders" delta={{ value: "+3 this month", positive: true }} />
+          <StatCard label="Total clinics" value={allClinics.length} hint="All registered" icon={<Building2 className="h-4 w-4" />} />
+          <StatCard label="Active" value={active.length} hint="Generating orders" />
           <StatCard label="Pending approval" value={pending.length} hint="Awaiting review" />
-          <StatCard label="Revenue MTD" value={currency(totalRevenue)} hint="Combined sales" delta={{ value: "+8.2%", positive: true }} />
+          <StatCard label="Revenue MTD" value={currency(totalRevenue)} hint="Combined sales" />
         </div>
 
         <SectionCard title="All clinics">
-          {/* Filters bar */}
-          <div className="flex items-center gap-2 px-5 py-3 border-b border-border flex-wrap">
-            <div className="relative flex-1 min-w-[200px] max-w-sm">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-              <input
-                placeholder="Search clinics…"
-                className="h-8 w-full rounded-md border border-input bg-background pl-8 pr-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/40"
-              />
-            </div>
-            <Button variant="outline" size="sm">
-              <Filter className="h-3.5 w-3.5" />
-              Status
-            </Button>
-            <Button variant="outline" size="sm">
-              <Filter className="h-3.5 w-3.5" />
-              Commission
-            </Button>
-          </div>
+          <Suspense fallback={null}>
+            <ClinicFilters />
+          </Suspense>
 
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -96,6 +88,13 @@ export default function ClinicsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
+                {clinics.length === 0 && (
+                  <tr>
+                    <td colSpan={8} className="py-12 text-center text-sm text-muted-foreground">
+                      No clinics match your filters.
+                    </td>
+                  </tr>
+                )}
                 {clinics.map((c) => (
                   <tr key={c.id} className="hover:bg-muted/40 transition-colors">
                     <td className="px-5 py-3">

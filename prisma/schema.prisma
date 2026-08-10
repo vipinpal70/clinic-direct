@@ -179,7 +179,7 @@ model AdminUser {
   id              String     @id @default(auto()) @map("_id") @db.ObjectId
   name            String
   email           String     @unique
-  passwordHash    String
+  password        String     // stored as plain text (explicit product decision — not hashed)
   role            UserRole   @default(read_only)
   twoFaSecret     String?
   twoFaEnabled    Boolean    @default(false)
@@ -191,8 +191,24 @@ model AdminUser {
   updatedAt       DateTime   @updatedAt
 
   auditLogs       AuditLog[]
+  sessions        Session[]
 
   @@map("admin_users")
+}
+
+model Session {
+  id              String    @id @default(auto()) @map("_id") @db.ObjectId
+  userId          String    @db.ObjectId
+  user            AdminUser @relation(fields: [userId], references: [id])
+  refreshTokenHash String   @unique // sha256 of the refresh token, never the raw token
+  userAgent       String?
+  ipAddress       String?
+  createdAt       DateTime  @default(now())
+  expiresAt       DateTime  // absolute 8h cap from login — never extended by refreshes
+  revokedAt       DateTime?
+
+  @@index([userId])
+  @@map("sessions")
 }
 
 model AuditLog {

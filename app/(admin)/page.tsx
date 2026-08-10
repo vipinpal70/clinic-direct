@@ -16,37 +16,49 @@ import { StatusPill } from "@/components/shared/status-pill";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { RevenueChart, OrdersByProductChart } from "./dashboard-charts";
-import {
-  clinics,
-  orders,
-  monthlyRevenue,
-  commissions,
-  ordersByProduct,
-} from "@/lib/mock";
+import { prisma } from "@/lib/prisma";
+import { getClinicsWithStats, getDashboardStats } from "@/lib/stats";
 import { currency, dateFmt, relativeTime } from "@/lib/utils";
 
 export const metadata = { title: "Dashboard" };
+export const dynamic = "force-dynamic";
 
-export default function DashboardPage() {
-  const activeClinics = clinics.filter((c) => c.status === "active").length;
-  const pendingApprovals = clinics.filter((c) => c.status === "pending").length;
-  const currentMonthRevenue = monthlyRevenue[monthlyRevenue.length - 1].revenue;
-  const prevMonthRevenue = monthlyRevenue[monthlyRevenue.length - 2].revenue;
-  const revenueGrowth = (
-    ((currentMonthRevenue - prevMonthRevenue) / prevMonthRevenue) * 100
-  ).toFixed(1);
-  const totalCommissionPayable = commissions
-    .filter((c) => c.status === "payable")
-    .reduce((a, b) => a + b.commission, 0);
-  const totalOrdersMtd = orders.filter((o) => {
-    const d = new Date(o.createdAt);
-    const now = new Date();
-    return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-  }).length;
+export default async function DashboardPage() {
+  const [clinics, stats, recentOrders, integrations] = await Promise.all([
+    getClinicsWithStats(),
+    getDashboardStats(),
+    prisma.order.findMany({
+      orderBy: { shopifyCreatedAt: "desc" },
+      take: 6,
+      include: { clinic: { select: { name: true, code: true } } },
+    }),
+    prisma.integrationConfig.findMany(),
+  ]);
 
-  const recentOrders = orders.slice(0, 6);
+  const currentMonthRevenue = stats.monthlyRevenue[stats.monthlyRevenue.length - 1]?.revenue ?? 0;
+  const prevMonthRevenue = stats.monthlyRevenue[stats.monthlyRevenue.length - 2]?.revenue ?? 0;
+  const revenueGrowth = prevMonthRevenue
+    ? (((currentMonthRevenue - prevMonthRevenue) / prevMonthRevenue) * 100).toFixed(1)
+    : "0.0";
+
   const latestClinics = clinics.slice(0, 5);
   const pendingClinics = clinics.filter((c) => c.status === "pending");
+
+  const integrationHealth = [
+    {
+      name: "Shopify",
+      ok: integrations.find((i) => i.provider === "shopify")?.active ?? false,
+      detail: integrations.find((i) => i.provider === "shopify")?.lastSyncAt
+        ? `Last sync ${relativeTime(integrations.find((i) => i.provider === "shopify")!.lastSyncAt!)}`
+        : "Not yet synced",
+    },
+    { name: "Database", ok: true, detail: "MongoDB · connected via Prisma" },
+    {
+      name: "Microsoft Clarity",
+      ok: integrations.find((i) => i.provider === "clarity")?.active ?? false,
+      detail: "Tracking on clinicdirect.co.uk",
+    },
+  ];
 
   return (
     <>
@@ -59,9 +71,8 @@ export default function DashboardPage() {
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <StatCard
             label="Active clinics"
-            value={activeClinics}
-            hint={`${pendingApprovals} pending approval`}
-            delta={{ value: "+3 this month", positive: true }}
+            value={clinics.filter((c) => c.status === "active").length}
+            hint={`${pendingClinics.length} pending approval`}
             icon={<Building2 className="h-4 w-4" />}
           />
           <StatCard
@@ -73,14 +84,13 @@ export default function DashboardPage() {
           />
           <StatCard
             label="Orders MTD"
-            value={totalOrdersMtd}
+            value={stats.ordersMtd}
             hint="Shopify orders"
-            delta={{ value: "+12.4%", positive: true }}
             icon={<ShoppingBag className="h-4 w-4" />}
           />
           <StatCard
             label="Commission payable"
-            value={currency(totalCommissionPayable)}
+            value={currency(stats.totalCommissionPayable)}
             hint="Ready for invoicing"
             icon={<Percent className="h-4 w-4" />}
           />
@@ -90,7 +100,7 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <SectionCard title="Monthly revenue & commission" className="lg:col-span-2">
             <Suspense fallback={<Skeleton className="h-72 m-4" />}>
-              <RevenueChart data={monthlyRevenue} />
+              <RevenueChart data={stats.monthlyRevenue} />
             </Suspense>
           </SectionCard>
 
@@ -149,37 +159,43 @@ export default function DashboardPage() {
               </Button>
             }
           >
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-left text-xs text-muted-foreground border-b border-border">
-                    <th className="font-medium px-5 py-2.5">Order</th>
-                    <th className="font-medium py-2.5">Clinic</th>
-                    <th className="font-medium py-2.5 text-right">Total</th>
-                    <th className="font-medium py-2.5 pr-5">Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {recentOrders.map((o) => (
-                    <tr key={o.id} className="hover:bg-muted/40 transition-colors">
-                      <td className="px-5 py-2.5">
-                        <div className="font-mono text-xs font-medium">{o.number}</div>
-                        <div className="text-[11px] text-muted-foreground">
-                          {relativeTime(o.createdAt)}
-                        </div>
-                      </td>
-                      <td className="py-2.5 text-xs font-medium">{o.clinicCode}</td>
-                      <td className="py-2.5 text-right tabular-nums font-medium">
-                        {currency(o.total)}
-                      </td>
-                      <td className="py-2.5 pr-5">
-                        <OrderStatusPill status={o.status} />
-                      </td>
+            {recentOrders.length === 0 ? (
+              <div className="py-12 text-center text-sm text-muted-foreground">
+                No orders yet.
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-xs text-muted-foreground border-b border-border">
+                      <th className="font-medium px-5 py-2.5">Order</th>
+                      <th className="font-medium py-2.5">Clinic</th>
+                      <th className="font-medium py-2.5 text-right">Total</th>
+                      <th className="font-medium py-2.5 pr-5">Status</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {recentOrders.map((o) => (
+                      <tr key={o.id} className="hover:bg-muted/40 transition-colors">
+                        <td className="px-5 py-2.5">
+                          <div className="font-mono text-xs font-medium">{o.number}</div>
+                          <div className="text-[11px] text-muted-foreground">
+                            {relativeTime(o.shopifyCreatedAt)}
+                          </div>
+                        </td>
+                        <td className="py-2.5 text-xs font-medium">{o.clinic.code}</td>
+                        <td className="py-2.5 text-right tabular-nums font-medium">
+                          {currency(o.total)}
+                        </td>
+                        <td className="py-2.5 pr-5">
+                          <OrderStatusPill status={o.status} />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </SectionCard>
 
           <SectionCard
@@ -231,12 +247,12 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <SectionCard title="Monthly sales trend">
             <Suspense fallback={<Skeleton className="h-72 m-4" />}>
-              <RevenueChart data={monthlyRevenue} />
+              <RevenueChart data={stats.monthlyRevenue} />
             </Suspense>
           </SectionCard>
           <SectionCard title="Orders by product">
             <Suspense fallback={<Skeleton className="h-72 m-4" />}>
-              <OrdersByProductChart data={ordersByProduct} />
+              <OrdersByProductChart data={stats.ordersByProduct} />
             </Suspense>
           </SectionCard>
         </div>
@@ -244,11 +260,7 @@ export default function DashboardPage() {
         {/* Integration health */}
         <SectionCard title="Integration health">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-px bg-border">
-            {[
-              { name: "Shopify", status: "Connected", detail: "Last sync 2m ago · clinicdirect.myshopify.com", ok: true },
-              { name: "Database", status: "Connected", detail: "MongoDB Atlas · All collections healthy", ok: true },
-              { name: "Microsoft Clarity", status: "Active", detail: "Tracking 5 pages on clinicdirect.co.uk", ok: true },
-            ].map((int) => (
+            {integrationHealth.map((int) => (
               <div key={int.name} className="bg-card p-5">
                 <div className="flex items-center gap-2 mb-2">
                   {int.ok ? (
@@ -258,7 +270,7 @@ export default function DashboardPage() {
                   )}
                   <span className="font-medium text-sm">{int.name}</span>
                   <StatusPill tone={int.ok ? "success" : "destructive"} className="ml-auto">
-                    {int.status}
+                    {int.ok ? "Connected" : "Inactive"}
                   </StatusPill>
                 </div>
                 <p className="text-xs text-muted-foreground">{int.detail}</p>

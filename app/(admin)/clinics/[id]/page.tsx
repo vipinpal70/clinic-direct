@@ -9,9 +9,6 @@ import {
   Percent,
   ShoppingBag,
   FileText,
-  Key,
-  Edit,
-  ExternalLink,
   Calendar,
   TrendingUp,
 } from "lucide-react";
@@ -21,9 +18,12 @@ import { StatCard } from "@/components/shared/stat-card";
 import { StatusPill } from "@/components/shared/status-pill";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { clinics, orders } from "@/lib/mock";
+import { prisma } from "@/lib/prisma";
+import { getClinicWithStats } from "@/lib/stats";
 import { currency, dateFmt, relativeTime } from "@/lib/utils";
 import type { ClinicStatus } from "@/types";
+import { EditClinicDialog } from "./edit-clinic-dialog";
+import { CredentialsForm } from "./credentials-form";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -38,20 +38,20 @@ const statusTone: Record<ClinicStatus, "success" | "warning" | "destructive" | "
 
 export async function generateMetadata({ params }: Props) {
   const { id } = await params;
-  const clinic = clinics.find((c) => c.id === id);
+  const clinic = await prisma.clinic.findUnique({ where: { id }, select: { name: true } });
   return { title: clinic?.name ?? "Clinic" };
 }
 
 export default async function ClinicProfilePage({ params }: Props) {
   const { id } = await params;
-  const clinic = clinics.find((c) => c.id === id);
+  const clinic = await getClinicWithStats(id);
   if (!clinic) notFound();
 
-  const clinicOrders = orders.filter((o) => o.clinicId === clinic.id);
-  const clinicCodeOrders = orders.filter((o) => o.clinicCode === clinic.code);
-  const totalCommission = Math.round(
-    (clinic.monthSales * clinic.commissionPct) / 100,
-  );
+  const clinicOrders = await prisma.order.findMany({
+    where: { clinicId: clinic.id },
+    orderBy: { shopifyCreatedAt: "desc" },
+    take: 20,
+  });
 
   return (
     <>
@@ -66,14 +66,18 @@ export default async function ClinicProfilePage({ params }: Props) {
                 All clinics
               </Link>
             </Button>
-            <Button variant="outline" size="sm">
-              <ExternalLink className="h-4 w-4" />
-              Portal link
-            </Button>
-            <Button size="sm">
-              <Edit className="h-4 w-4" />
-              Edit clinic
-            </Button>
+            <EditClinicDialog
+              clinic={{
+                id: clinic.id,
+                name: clinic.name,
+                email: clinic.email,
+                phone: clinic.phone,
+                address: clinic.address,
+                website: clinic.website,
+                commissionPct: clinic.commissionPct,
+                notes: clinic.notes,
+              }}
+            />
           </>
         }
       />
@@ -116,7 +120,7 @@ export default async function ClinicProfilePage({ params }: Props) {
           />
           <StatCard
             label="Commission MTD"
-            value={currency(totalCommission)}
+            value={currency(Math.round((clinic.monthSales * clinic.commissionPct) / 100))}
             hint={`${clinic.commissionPct}% rate`}
             icon={<Percent className="h-4 w-4" />}
           />
@@ -132,7 +136,6 @@ export default async function ClinicProfilePage({ params }: Props) {
           <TabsList>
             <TabsTrigger value="details">Details</TabsTrigger>
             <TabsTrigger value="orders">Orders ({clinicOrders.length})</TabsTrigger>
-            <TabsTrigger value="clinic-code">Clinic code orders</TabsTrigger>
             <TabsTrigger value="credentials">Login credentials</TabsTrigger>
           </TabsList>
 
@@ -188,7 +191,6 @@ export default async function ClinicProfilePage({ params }: Props) {
                   />
                   <Field label="VAT" value="20% on commission" />
                   <Field label="Payment terms" value="30 days" />
-                  <Field label="Invoice prefix" value="SBI-2026-" />
                 </div>
               </SectionCard>
             </div>
@@ -212,50 +214,12 @@ export default async function ClinicProfilePage({ params }: Props) {
             </SectionCard>
           </TabsContent>
 
-          <TabsContent value="clinic-code" className="mt-4">
-            <SectionCard
-              title="Clinic-code orders"
-              description={`Orders placed using code ${clinic.code}`}
-            >
-              {clinicCodeOrders.length === 0 ? (
-                <EmptyState message="No orders placed using this clinic code yet." />
-              ) : (
-                <OrderTable orders={clinicCodeOrders} />
-              )}
-            </SectionCard>
-          </TabsContent>
-
           <TabsContent value="credentials" className="mt-4">
             <SectionCard
               title="Login credentials"
               description="Portal access for this clinic"
-              actions={<Button size="sm"><Key className="h-4 w-4" />Update credentials</Button>}
             >
-              <div className="p-5 space-y-4">
-                <label className="block">
-                  <div className="text-xs text-muted-foreground mb-1.5">
-                    Portal email
-                  </div>
-                  <input
-                    defaultValue={clinic.loginEmail ?? ""}
-                    placeholder="portal@clinic.co.uk"
-                    className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring/40 max-w-md"
-                  />
-                </label>
-                <label className="block">
-                  <div className="text-xs text-muted-foreground mb-1.5">
-                    New password
-                  </div>
-                  <input
-                    type="password"
-                    placeholder="Leave blank to keep current"
-                    className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring/40 max-w-md"
-                  />
-                </label>
-                <div className="pt-1">
-                  <Button size="sm">Save credentials</Button>
-                </div>
-              </div>
+              <CredentialsForm clinicId={clinic.id} loginEmail={clinic.loginEmail} />
             </SectionCard>
           </TabsContent>
         </Tabs>
@@ -299,7 +263,9 @@ function Field({
   );
 }
 
-function OrderTable({ orders: os }: { orders: typeof orders }) {
+type OrderRow = Awaited<ReturnType<typeof prisma.order.findMany>>[number];
+
+function OrderTable({ orders }: { orders: OrderRow[] }) {
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
@@ -314,12 +280,12 @@ function OrderTable({ orders: os }: { orders: typeof orders }) {
           </tr>
         </thead>
         <tbody className="divide-y divide-border">
-          {os.slice(0, 10).map((o) => (
+          {orders.map((o) => (
             <tr key={o.id} className="hover:bg-muted/40">
               <td className="px-5 py-2.5 font-mono text-xs font-medium">
                 {o.number}
               </td>
-              <td className="py-2.5">{o.customer}</td>
+              <td className="py-2.5">{o.customerName ?? "—"}</td>
               <td className="py-2.5 text-right tabular-nums">{currency(o.total)}</td>
               <td className="py-2.5 text-right tabular-nums text-muted-foreground">
                 {currency(o.commission)}
@@ -328,7 +294,7 @@ function OrderTable({ orders: os }: { orders: typeof orders }) {
                 <OrderStatusPill status={o.status} />
               </td>
               <td className="py-2.5 pr-5 text-muted-foreground text-xs">
-                {relativeTime(o.createdAt)}
+                {relativeTime(o.shopifyCreatedAt)}
               </td>
             </tr>
           ))}

@@ -1,3 +1,4 @@
+import Link from "next/link";
 import {
   FileSignature,
   Send,
@@ -9,10 +10,12 @@ import { PageHeader, PageBody } from "@/components/shared/page-header";
 import { SectionCard } from "@/components/shared/section-card";
 import { StatusPill } from "@/components/shared/status-pill";
 import { Button } from "@/components/ui/button";
-import { clinics } from "@/lib/mock";
+import { prisma } from "@/lib/prisma";
 import { dateFmt } from "@/lib/utils";
+import { ApproveButton } from "./approve-button";
 
 export const metadata = { title: "Approvals" };
+export const dynamic = "force-dynamic";
 
 const STAGES = [
   { key: "created", label: "Clinic created", icon: FileSignature, step: 1 },
@@ -30,8 +33,11 @@ function getStageIndex(agreement: string): number {
   return -1; // fully approved
 }
 
-export default function ApprovalsPage() {
-  const pending = clinics.filter((c) => c.status === "pending");
+export default async function ApprovalsPage() {
+  const pending = await prisma.clinic.findMany({
+    where: { status: "pending" },
+    orderBy: { joined: "desc" },
+  });
 
   return (
     <>
@@ -129,15 +135,10 @@ export default function ApprovalsPage() {
                   </StatusPill>
 
                   <div className="flex items-center gap-2 shrink-0">
-                    <Button variant="outline" size="sm">
-                      Review
+                    <Button variant="outline" size="sm" asChild>
+                      <Link href={`/clinics/${c.id}`}>Review</Link>
                     </Button>
-                    <Button
-                      size="sm"
-                      disabled={c.agreement !== "accepted"}
-                    >
-                      Approve
-                    </Button>
+                    <ApproveButton clinicId={c.id} disabled={c.agreement !== "accepted"} />
                   </div>
                 </div>
               );

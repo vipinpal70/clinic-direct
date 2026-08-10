@@ -1,11 +1,26 @@
-import { Eye, Lock, Mail } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Suspense } from "react";
+import { prisma } from "@/lib/prisma";
+import { getDashboardStats } from "@/lib/stats";
+import { currency } from "@/lib/utils";
+import { LoginForm } from "./login-form";
 
 export const metadata = { title: "Sign in" };
+export const dynamic = "force-dynamic";
 
-export default function LoginPage() {
+export default async function LoginPage() {
+  const [activeClinics, stats] = await Promise.all([
+    prisma.clinic.count({ where: { status: "active" } }),
+    getDashboardStats(),
+  ]);
+  const currentMonth = stats.monthlyRevenue[stats.monthlyRevenue.length - 1];
+
+  const heroStats = [
+    { label: "Active clinics", value: String(activeClinics) },
+    { label: "Orders this month", value: String(stats.ordersMtd) },
+    { label: "Commission payable", value: currency(stats.totalCommissionPayable) },
+    { label: "Monthly revenue", value: currency(currentMonth?.revenue ?? 0) },
+  ];
+
   return (
     <div className="min-h-screen bg-primary flex">
       {/* Left panel */}
@@ -38,12 +53,7 @@ export default function LoginPage() {
           </p>
 
           <div className="mt-8 grid grid-cols-2 gap-4">
-            {[
-              { label: "Active clinics", value: "7" },
-              { label: "Orders this month", value: "415" },
-              { label: "Commission payable", value: "£48,920" },
-              { label: "Platform uptime", value: "99.98%" },
-            ].map((s) => (
+            {heroStats.map((s) => (
               <div
                 key={s.label}
                 className="bg-white/10 rounded-xl p-4 border border-white/15"
@@ -76,57 +86,9 @@ export default function LoginPage() {
             </p>
           </div>
 
-          <form className="space-y-4">
-            <div>
-              <Label htmlFor="email" className="text-xs">
-                Email address
-              </Label>
-              <div className="relative mt-1.5">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="you@clinicdirect.co.uk"
-                  className="pl-9"
-                  autoComplete="email"
-                />
-              </div>
-            </div>
-
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <Label htmlFor="password" className="text-xs">
-                  Password
-                </Label>
-                <a
-                  href="#"
-                  className="text-xs text-primary hover:underline"
-                >
-                  Forgot password?
-                </a>
-              </div>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-                <Input
-                  id="password"
-                  type="password"
-                  placeholder="••••••••"
-                  className="pl-9 pr-9"
-                  autoComplete="current-password"
-                />
-                <button
-                  type="button"
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  <Eye className="h-4 w-4" />
-                </button>
-              </div>
-            </div>
-
-            <Button type="submit" className="w-full mt-2">
-              Sign in
-            </Button>
-          </form>
+          <Suspense fallback={null}>
+            <LoginForm />
+          </Suspense>
 
           <p className="text-xs text-center text-muted-foreground mt-6">
             Need access?{" "}
