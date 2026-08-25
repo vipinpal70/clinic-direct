@@ -62,6 +62,24 @@ enum UserStatus {
   suspended
 }
 
+// ─── Embedded (composite) types ───────────────────────────────
+
+// Bank + tax details the clinic supplies via the public intake page —
+// Shopify does not expose these, so they're collected separately.
+type BankDetails {
+  accountHolderName String @default("")
+  bankName          String @default("")
+  accountNumber     String @default("")
+  sortCode          String @default("")
+}
+
+type TaxExempt {
+  exemptStatus            Boolean @default(false)
+  exemptionTypeCode       String  @default("")
+  exemptionCertificateUrl String  @default("")
+  vatId                   String  @default("")
+}
+
 // ─── Models ───────────────────────────────────────────────────
 
 model Clinic {
@@ -80,6 +98,22 @@ model Clinic {
   loginEmail      String?
   loginHash       String?         // bcrypt hash of portal password
 
+  // Clinic-supplied intake (public page → Step 1)
+  bankDetails        BankDetails?
+  taxExempt          TaxExempt?
+  detailsSubmittedAt DateTime?
+
+  // Per-clinic agreement / consent (Step 2)
+  agreementId            String?   // random id embedded in the public link (queried with code)
+  agreementSnapshot      String?           // frozen HTML at send time — the consent form
+  agreementCommissionPct Float?            // rate offered on the agreement (applied on approval)
+  agreementExpiry        DateTime?
+  agreementSentAt        DateTime?
+  agreementAcceptedAt    DateTime?
+  agreementApprovedAt    DateTime?
+  agreementSignedName    String?
+  agreementLocked        Boolean   @default(false) // once approved, no more edits
+
   orders          Order[]
   commissions     Commission[]
   invoices        Invoice[]
@@ -94,8 +128,8 @@ model Order {
   id              String      @id @default(auto()) @map("_id") @db.ObjectId
   shopifyId       String      @unique
   number          String
-  clinicId        String      @db.ObjectId
-  clinic          Clinic      @relation(fields: [clinicId], references: [id])
+  clinicId        String?     @db.ObjectId
+  clinic          Clinic?     @relation(fields: [clinicId], references: [id], onDelete: SetNull)
   status          OrderStatus @default(pending)
   total           Float
   commission      Float
@@ -118,8 +152,8 @@ model Order {
 
 model Commission {
   id              String           @id @default(auto()) @map("_id") @db.ObjectId
-  clinicId        String           @db.ObjectId
-  clinic          Clinic           @relation(fields: [clinicId], references: [id])
+  clinicId        String?          @db.ObjectId
+  clinic          Clinic?          @relation(fields: [clinicId], references: [id], onDelete: SetNull)
   period          String           // "2026-07"
   gross           Float
   commission      Float
@@ -140,8 +174,8 @@ model Commission {
 model Invoice {
   id              String        @id @default(auto()) @map("_id") @db.ObjectId
   number          String        @unique
-  clinicId        String        @db.ObjectId
-  clinic          Clinic        @relation(fields: [clinicId], references: [id])
+  clinicId        String?       @db.ObjectId
+  clinic          Clinic?       @relation(fields: [clinicId], references: [id], onDelete: SetNull)
   commission      Float
   vat             Float
   total           Float

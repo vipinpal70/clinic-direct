@@ -55,7 +55,7 @@ export default async function ClinicsPage({ searchParams }: Props) {
         actions={
           <>
             <ImportExportButtons />
-            <AddClinicDialog />
+            {/* <AddClinicDialog /> */}
           </>
         }
       />

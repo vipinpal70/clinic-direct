@@ -183,7 +183,7 @@ export default async function DashboardPage() {
                             {relativeTime(o.shopifyCreatedAt)}
                           </div>
                         </td>
-                        <td className="py-2.5 text-xs font-medium">{o.clinic.code}</td>
+                        <td className="py-2.5 text-xs font-medium">{o.clinic?.code ?? "N/A"}</td>
                         <td className="py-2.5 text-right tabular-nums font-medium">
                           {currency(o.total)}
                         </td>

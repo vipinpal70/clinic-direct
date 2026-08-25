@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Clinic Direct — Agreement</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 40px 20px;
+    background: #F1EFE8;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: #2C2C2A;
+  }
+  .page {
+    max-width: 640px;
+    margin: 0 auto;
+  }
+  .card {
+    background: #FFFFFF;
+    border-radius: 12px;
+    border: 1px solid #E3E1D8;
+    overflow: hidden;
+  }
+  .header {
+    padding: 32px 40px 24px;
+    border-bottom: 1px solid #E3E1D8;
+  }
+  .brand-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 24px;
+  }
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .logo {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    background: #007A72;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .brand-name {
+    font-size: 14px;
+    font-weight: 600;
+  }
+  .ref {
+    font-size: 12px;
+    color: #888780;
+  }
+  h1 {
+    font-size: 24px;
+    font-weight: 600;
+    margin: 0 0 6px;
+  }
+  .subtitle {
+    font-size: 13px;
+    color: #5F5E5A;
+    margin: 0;
+  }
+  .body {
+    padding: 32px 40px;
+  }
+  .summary-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    margin-bottom: 32px;
+  }
+  .summary-item {
+    background: #F8F7F3;
+    border-radius: 8px;
+    padding: 12px 14px;
+  }
+  .summary-label {
+    font-size: 12px;
+    color: #888780;
+    margin: 0 0 4px;
+  }
+  .summary-value {
+    font-size: 14px;
+    font-weight: 600;
+    margin: 0;
+  }
+  .clause {
+    display: flex;
+    gap: 10px;
+    font-size: 15px;
+    line-height: 1.7;
+    margin: 0 0 14px;
+  }
+  .clause:last-of-type {
+    margin-bottom: 0;
+  }
+  .clause-num {
+    color: #888780;
+    font-weight: 600;
+    min-width: 18px;
+  }
+  .signature-section {
+    margin-top: 32px;
+    padding-top: 24px;
+    border-top: 1px solid #E3E1D8;
+  }
+  .consent-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    cursor: pointer;
+    margin-bottom: 20px;
+  }
+  .consent-row input[type="checkbox"] {
+    margin-top: 3px;
+    width: 16px;
+    height: 16px;
+    accent-color: #007A72;
+  }
+  .consent-text {
+    font-size: 14px;
+    color: #5F5E5A;
+  }
+  label.field-label {
+    display: block;
+    font-size: 13px;
+    color: #5F5E5A;
+    margin-bottom: 6px;
+  }
+  input[type="text"] {
+    width: 100%;
+    height: 40px;
+    padding: 0 12px;
+    border-radius: 8px;
+    border: 1px solid #D3D1C7;
+    font-size: 14px;
+    font-family: inherit;
+    outline: none;
+  }
+  input[type="text"]:focus {
+    border-color: #007A72;
+    box-shadow: 0 0 0 3px rgba(0, 122, 114, 0.12);
+  }
+  .error-text {
+    font-size: 13px;
+    color: #A32D2D;
+    margin: 6px 0 0;
+    display: none;
+  }
+  .accept-btn {
+    margin-top: 20px;
+    width: 100%;
+    background: #007A72;
+    color: #fff;
+    border: none;
+    height: 44px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+  }
+  .accept-btn:hover {
+    background: #085041;
+  }
+  .expiry-note {
+    margin-top: 24px;
+    padding: 12px 14px;
+    background: #FAEEDA;
+    border-radius: 8px;
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+    font-size: 13px;
+    color: #633806;
+  }
+  .accepted-view {
+    padding: 56px 40px;
+    text-align: center;
+    display: none;
+  }
+  .check-circle {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: #EAF3DE;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 14px;
+    font-size: 22px;
+    color: #27500A;
+  }
+  .accepted-title {
+    font-weight: 600;
+    font-size: 16px;
+    margin: 0 0 4px;
+  }
+  .accepted-sub {
+    font-size: 13px;
+    color: #5F5E5A;
+    margin: 0;
+  }
+</style>
+</head>
+<body>
+
+<div class="page">
+  <div class="card">
+
+    <div class="header">
+      <div class="brand-row">
+        <div class="brand">
+          <div class="logo">CD</div>
+          <span class="brand-name">Clinic Direct</span>
+        </div>
+        <span class="ref">Ref. CD-2026-00847</span>
+      </div>
+      <h1>Partnership agreement</h1>
+      <p class="subtitle">Prepared for Summit Aesthetics · 18 Aug 2026</p>
+    </div>
+
+    <div class="body" id="content-view">
+      <div class="summary-grid">
+        <div class="summary-item">
+          <p class="summary-label">Clinic</p>
+          <p class="summary-value">Summit Aesthetics</p>
+        </div>
+        <div class="summary-item">
+          <p class="summary-label">Commission rate</p>
+          <p class="summary-value">15%</p>
+        </div>
+        <div class="summary-item">
+          <p class="summary-label">Effective date</p>
+          <p class="summary-value">1 Sep 2026</p>
+        </div>
+        <div class="summary-item">
+          <p class="summary-label">Payment terms</p>
+          <p class="summary-value">Net 30</p>
+        </div>
+      </div>
+
+      <div class="clauses">
+        <p class="clause"><span class="clause-num">1.</span><span>Clinic Direct will list the clinic on its platform and route qualifying referrals under the commission rate stated above.</span></p>
+        <p class="clause"><span class="clause-num">2.</span><span>Invoices are issued monthly in arrears and are due within the payment terms stated above.</span></p>
+        <p class="clause"><span class="clause-num">3.</span><span>Either party may terminate this agreement with 30 days' written notice.</span></p>
+        <p class="clause"><span class="clause-num">4.</span><span>This agreement is governed by the laws of the jurisdiction in which Clinic Direct is registered.</span></p>
+      </div>
+
+      <div class="expiry-note">
+        <span>This link expires 7 days from when it was sent.</span>
+      </div>
+
+      <div class="signature-section">
+        <label class="consent-row">
+          <input type="checkbox" id="consent-check" />
+          <span class="consent-text">I have read and agree to the terms above on behalf of Summit Aesthetics.</span>
+        </label>
+
+        <label class="field-label" for="sign-name">Type your full name to sign</label>
+        <input type="text" id="sign-name" placeholder="Full name" />
+        <p class="error-text" id="sign-error">Enter your name to sign.</p>
+
+        <button class="accept-btn" id="accept-btn">Sign and accept</button>
+      </div>
+    </div>
+
+    <div class="accepted-view" id="accepted-view">
+      <div class="check-circle">&#10003;</div>
+      <p class="accepted-title">Agreement signed</p>
+      <p class="accepted-sub" id="signed-by-line">Signed by Summit Aesthetics on 18 Aug 2026. Your account is now active.</p>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  document.getElementById('accept-btn').addEventListener('click', function () {
+    var checked = document.getElementById('consent-check').checked;
+    var name = document.getElementById('sign-name').value.trim();
+    var error = document.getElementById('sign-error');
+
+    if (!checked || !name) {
+      error.textContent = !checked ? "Please confirm you agree to the terms." : "Enter your name to sign.";
+      error.style.display = 'block';
+      return;
+    }
+
+    error.style.display = 'none';
+    document.getElementById('signed-by-line').textContent =
+      'Signed by ' + name + ' on 18 Aug 2026. Your account is now active.';
+    document.getElementById('content-view').style.display = 'none';
+    document.getElementById('accepted-view').style.display = 'block';
+  });
+</script>
+
+</body>
+</html>

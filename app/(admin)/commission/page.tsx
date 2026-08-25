@@ -155,8 +155,8 @@ export default async function CommissionPage() {
                 {commissions.map((c) => (
                   <tr key={c.id} className="hover:bg-muted/40 transition-colors">
                     <td className="px-5 py-3">
-                      <div className="font-medium">{c.clinic.name}</div>
-                      <div className="text-xs text-muted-foreground">{c.clinic.code}</div>
+                      <div className="font-medium">{c.clinic?.name ?? "—"}</div>
+                      <div className="text-xs text-muted-foreground">{c.clinic?.code ?? "—"}</div>
                     </td>
                     <td className="py-3 text-right tabular-nums">{currency(c.gross)}</td>
                     <td className="py-3 text-right tabular-nums font-semibold text-primary">

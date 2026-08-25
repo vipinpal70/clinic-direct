@@ -23,7 +23,7 @@ import { getClinicWithStats } from "@/lib/stats";
 import { currency, dateFmt, relativeTime } from "@/lib/utils";
 import type { ClinicStatus } from "@/types";
 import { EditClinicDialog } from "./edit-clinic-dialog";
-import { CredentialsForm } from "./credentials-form";
+import { AgreementPanel } from "./agreement-panel";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -136,7 +136,7 @@ export default async function ClinicProfilePage({ params }: Props) {
           <TabsList>
             <TabsTrigger value="details">Details</TabsTrigger>
             <TabsTrigger value="orders">Orders ({clinicOrders.length})</TabsTrigger>
-            <TabsTrigger value="credentials">Login credentials</TabsTrigger>
+            <TabsTrigger value="onboarding">Onboarding &amp; agreement</TabsTrigger>
           </TabsList>
 
           <TabsContent value="details" className="mt-4 space-y-4">
@@ -214,12 +214,58 @@ export default async function ClinicProfilePage({ params }: Props) {
             </SectionCard>
           </TabsContent>
 
-          <TabsContent value="credentials" className="mt-4">
+          <TabsContent value="onboarding" className="mt-4 space-y-4">
             <SectionCard
-              title="Login credentials"
-              description="Portal access for this clinic"
+              title="Onboarding & agreement"
+              description="Collect clinic details, then send the partnership agreement."
             >
-              <CredentialsForm clinicId={clinic.id} loginEmail={clinic.loginEmail} />
+              <AgreementPanel
+                clinicId={clinic.id}
+                code={clinic.code}
+                agreement={clinic.agreement}
+                commissionPct={clinic.commissionPct}
+                agreementCommissionPct={clinic.agreementCommissionPct ?? null}
+                agreementExpiry={
+                  clinic.agreementExpiry
+                    ? clinic.agreementExpiry.toISOString()
+                    : null
+                }
+                agreementLocked={clinic.agreementLocked}
+                agreementSignedName={clinic.agreementSignedName ?? null}
+                detailsSubmitted={Boolean(clinic.detailsSubmittedAt)}
+              />
+            </SectionCard>
+
+            <SectionCard
+              title="Submitted bank & tax details"
+              description={
+                clinic.detailsSubmittedAt
+                  ? `Received ${dateFmt(clinic.detailsSubmittedAt)}`
+                  : "The clinic has not submitted its details yet."
+              }
+            >
+              {clinic.detailsSubmittedAt ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-y-4 p-5">
+                  <Field label="Account holder" value={clinic.bankDetails?.accountHolderName || "—"} />
+                  <Field label="Bank name" value={clinic.bankDetails?.bankName || "—"} />
+                  <Field label="Account number" value={clinic.bankDetails?.accountNumber || "—"} />
+                  <Field label="Sort code" value={clinic.bankDetails?.sortCode || "—"} />
+                  <Field label="VAT number" value={clinic.taxExempt?.vatId || "—"} />
+                  <Field
+                    label="Tax exempt"
+                    value={clinic.taxExempt?.exemptStatus ? `Yes (${clinic.taxExempt.exemptionTypeCode || "no code"})` : "No"}
+                  />
+                  {clinic.taxExempt?.exemptionCertificateUrl && (
+                    <Field
+                      label="Exemption certificate"
+                      value={clinic.taxExempt.exemptionCertificateUrl}
+                      link
+                    />
+                  )}
+                </div>
+              ) : (
+                <EmptyState message="No bank or tax details submitted yet." />
+              )}
             </SectionCard>
           </TabsContent>
         </Tabs>

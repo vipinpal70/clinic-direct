@@ -24,12 +24,29 @@ const statusTone: Record<
 };
 
 export default async function InvoicesPage() {
-  const currentPeriod = new Date().toISOString().slice(0, 7);
+  const [invoices, generatable] = await Promise.all([
+    prisma.invoice.findMany({
+      include: { clinic: { select: { name: true, code: true } } },
+      orderBy: { createdAt: "desc" },
+    }),
+    // Periods that actually have approved, not-yet-invoiced commissions.
+    // (Match unset OR null invoiceId — seeded records have the field absent.)
+    prisma.commission.groupBy({
+      by: ["period"],
+      where: {
+        status: "approved",
+        OR: [{ invoiceId: null }, { invoiceId: { isSet: false } }],
+      },
+      _count: { _all: true },
+      _sum: { commission: true },
+      orderBy: { period: "desc" },
+    }),
+  ]);
 
-  const invoices = await prisma.invoice.findMany({
-    include: { clinic: { select: { name: true, code: true } } },
-    orderBy: { createdAt: "desc" },
-  });
+  const periods = generatable.map((g) => ({
+    period: g.period,
+    count: g._count._all,
+  }));
 
   const total = invoices.reduce((a, b) => a + b.total, 0);
   const awaiting = invoices.filter((i) => i.status === "issued").length;
@@ -49,8 +66,8 @@ export default async function InvoicesPage() {
                 Export CSV
               </a>
             </Button>
-            <GenerateInvoicesButton period={currentPeriod} />
-            <PushQueuedButton />
+            <GenerateInvoicesButton periods={periods} />
+            <PushQueuedButton disabled={awaiting === 0} />
           </>
         }
       />
@@ -91,7 +108,7 @@ export default async function InvoicesPage() {
                       {inv.number}
                     </td>
                     <td className="py-3 text-sm">{dateFmt(inv.createdAt)}</td>
-                    <td className="py-3">{inv.clinic.name}</td>
+                    <td className="py-3">{inv.clinic?.name ?? "—"}</td>
                     <td className="py-3 text-right tabular-nums">
                       {currencyExact(inv.commission)}
                     </td>

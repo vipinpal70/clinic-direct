@@ -129,9 +129,9 @@ export default async function OrdersPage({ searchParams }: Props) {
                     </td>
                     <td className="py-2.5">{o.customerName ?? "—"}</td>
                     <td className="py-2.5">
-                      <div className="text-xs font-medium">{o.clinic.code}</div>
+                      <div className="text-xs font-medium">{o.clinic?.code ?? "N/A"}</div>
                       <div className="text-[11px] text-muted-foreground">
-                        {o.clinic.name}
+                        {o.clinic?.name ?? "Unknown Clinic"}
                       </div>
                     </td>
                     <td className="py-2.5 tabular-nums">{o.items}</td>

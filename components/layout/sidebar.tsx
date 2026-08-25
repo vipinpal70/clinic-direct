@@ -18,6 +18,7 @@ import {
 	User,
 } from "lucide-react";
 import { cn, initials } from "@/lib/utils";
+import { canAccessPath } from "@/lib/roles";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
@@ -81,6 +82,12 @@ export function Sidebar({ user }: SidebarProps) {
 	const pathname = usePathname();
 	const displayName = user.name ?? user.email ?? "Admin";
 
+	// Hide nav the current role can't reach (finance → invoices only).
+	const nav = NAV.map((group) => ({
+		...group,
+		items: group.items.filter((item) => canAccessPath(user.role, item.to)),
+	})).filter((group) => group.items.length > 0);
+
 	return (
 		<aside className="hidden lg:flex w-64 flex-col border-r border-sidebar-border bg-sidebar flex-shrink-0 h-screen sticky top-0">
 			{/* Logo */}
@@ -100,7 +107,7 @@ export function Sidebar({ user }: SidebarProps) {
 
 			{/* Nav — no scroll, fixed */}
 			<nav className="flex-1 py-3 px-3 space-y-4 min-h-0">
-				{NAV.map((group) => (
+				{nav.map((group) => (
 					<div key={group.section}>
 						<div className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-widest text-sidebar-muted-foreground">
 							{group.section}

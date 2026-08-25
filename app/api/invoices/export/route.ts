@@ -19,7 +19,7 @@ export async function GET() {
     const rows = invoices.map((inv) => [
       inv.number,
       inv.createdAt.toISOString().slice(0, 10),
-      inv.clinic.name,
+      inv.clinic?.name ?? "",
       inv.commission,
       inv.vat,
       inv.total,

@@ -56,7 +56,14 @@ export async function POST(req: NextRequest) {
     const periodEnd = new Date(year, month, 1);
 
     const commissions = await prisma.commission.findMany({
-      where: { period, status: "approved", invoiceId: null },
+      // "Not yet invoiced" must match both an explicit null and an unset field —
+      // Prisma's `invoiceId: null` alone excludes documents where the field is
+      // absent (as seeded), so we OR in `isSet: false`.
+      where: {
+        period,
+        status: "approved",
+        OR: [{ invoiceId: null }, { invoiceId: { isSet: false } }],
+      },
     });
     if (commissions.length === 0) {
       throw new ApiError(400, "No approved commissions ready to invoice for this period");
@@ -64,6 +71,7 @@ export async function POST(req: NextRequest) {
 
     const byClinic = new Map<string, typeof commissions>();
     for (const c of commissions) {
+      if (!c.clinicId) continue;
       byClinic.set(c.clinicId, [...(byClinic.get(c.clinicId) ?? []), c]);
     }
 

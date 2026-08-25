@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { prisma } from "@/lib/prisma";
 import { dateFmt } from "@/lib/utils";
 import { ApproveButton } from "./approve-button";
+import { AgreementDialog } from "./agreement-dialog";
 
 export const metadata = { title: "Approvals" };
 export const dynamic = "force-dynamic";
@@ -138,6 +139,20 @@ export default async function ApprovalsPage() {
                     <Button variant="outline" size="sm" asChild>
                       <Link href={`/clinics/${c.id}`}>Review</Link>
                     </Button>
+                    <AgreementDialog
+                      clinicId={c.id}
+                      clinicName={c.name}
+                      code={c.code}
+                      agreement={c.agreement}
+                      commissionPct={c.commissionPct}
+                      agreementCommissionPct={c.agreementCommissionPct ?? null}
+                      agreementExpiry={
+                        c.agreementExpiry ? c.agreementExpiry.toISOString() : null
+                      }
+                      agreementLocked={c.agreementLocked}
+                      agreementSignedName={c.agreementSignedName ?? null}
+                      detailsSubmitted={Boolean(c.detailsSubmittedAt)}
+                    />
                     <ApproveButton clinicId={c.id} disabled={c.agreement !== "accepted"} />
                   </div>
                 </div>

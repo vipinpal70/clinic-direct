@@ -20,7 +20,7 @@ export async function GET() {
       "commission", "status", "date",
     ];
     const rows = orders.map((o) => [
-      o.number, o.clinic.code, o.customerName ?? "", o.items,
+      o.number, o.clinic?.code ?? "", o.customerName ?? "", o.items,
       o.total, o.commission, o.status,
       o.shopifyCreatedAt.toISOString().slice(0, 10),
     ]);

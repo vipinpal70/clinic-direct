@@ -43,7 +43,21 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     const existing = await prisma.clinic.findUnique({ where: { id } });
     if (!existing) throw new ApiError(404, "Clinic not found");
 
-    if (input.status === "active" && existing.status === "pending") {
+    // Once an agreement is approved & locked, block edits to commission/agreement.
+    if (
+      existing.agreementLocked &&
+      (input.commissionPct !== undefined || input.agreement !== undefined)
+    ) {
+      throw new ApiError(
+        409,
+        "This clinic's agreement is locked and can no longer be edited.",
+      );
+    }
+
+    // Approval: pending → active requires an accepted agreement. On approval we
+    // lock the agreement and apply the rate that was offered on it.
+    const isApproval = input.status === "active" && existing.status === "pending";
+    if (isApproval) {
       const agreementAfterUpdate = input.agreement ?? existing.agreement;
       if (agreementAfterUpdate !== "accepted") {
         throw new ApiError(
@@ -55,7 +69,18 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
     const clinic = await prisma.clinic.update({
       where: { id },
-      data: { ...input, website: input.website || undefined },
+      data: {
+        ...input,
+        website: input.website || undefined,
+        ...(isApproval
+          ? {
+              agreementLocked: true,
+              agreementApprovedAt: new Date(),
+              commissionPct:
+                existing.agreementCommissionPct ?? existing.commissionPct,
+            }
+          : {}),
+      },
     });
 
     if (input.status && input.status !== existing.status) {
@@ -91,6 +116,12 @@ export async function DELETE(req: NextRequest, { params }: Params) {
   try {
     const session = await requireSession();
     const { id } = await params;
+
+    // Clean up relations first to prevent orphaned records in MongoDB
+    await prisma.order.deleteMany({ where: { clinicId: id } });
+    await prisma.commission.deleteMany({ where: { clinicId: id } });
+    await prisma.invoice.deleteMany({ where: { clinicId: id } });
+
     const clinic = await prisma.clinic.delete({ where: { id } });
 
     await logAudit({
