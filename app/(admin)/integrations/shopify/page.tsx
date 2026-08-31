@@ -6,7 +6,8 @@ import { StatusPill } from "@/components/shared/status-pill";
 import { Button } from "@/components/ui/button";
 import { prisma } from "@/lib/prisma";
 import { relativeTime } from "@/lib/utils";
-import { ManualSyncButton } from "./shopify-actions";
+import { getTokenStatus, shopifyConfigured, type TokenStatus } from "@/lib/shopify";
+import { ApiPullButton } from "./shopify-actions";
 
 export const metadata = { title: "Shopify" };
 export const dynamic = "force-dynamic";
@@ -24,7 +25,7 @@ function mask(value: string | undefined) {
 }
 
 export default async function ShopifyPage() {
-  const [config, recentLogs, failedCount] = await Promise.all([
+  const [config, recentLogs, failedCount, tokenStatus] = await Promise.all([
     prisma.integrationConfig.findUnique({ where: { provider: "shopify" } }),
     prisma.webhookLog.findMany({
       where: { provider: "shopify" },
@@ -32,12 +33,16 @@ export default async function ShopifyPage() {
       take: 10,
     }),
     prisma.webhookLog.count({ where: { provider: "shopify", status: "failed" } }),
+    getTokenStatus(),
   ]);
 
   const storeUrl = process.env.SHOPIFY_STORE_URL;
+  const clientId = mask(process.env.SHOPIFY_CLIENT_ID);
+  const clientSecret = mask(process.env.SHOPIFY_CLIENT_SECRET);
   const apiKey = mask(process.env.SHOPIFY_ADMIN_API_KEY);
+  const apiVersion = process.env.SHOPIFY_API_VERSION || "2025-01";
   const webhookSecret = mask(process.env.SHOPIFY_WEBHOOK_SECRET);
-  const configured = Boolean(storeUrl && process.env.SHOPIFY_ADMIN_API_KEY);
+  const configured = shopifyConfigured();
 
   return (
     <>
@@ -54,7 +59,7 @@ export default async function ShopifyPage() {
                 </a>
               </Button>
             )}
-            <ManualSyncButton />
+            <ApiPullButton />
           </>
         }
       />
@@ -66,23 +71,33 @@ export default async function ShopifyPage() {
             hint={storeUrl ?? "Set SHOPIFY_STORE_URL"}
           />
           <StatCard
-            label="Last sync"
+            label="Access token"
+            value={tokenLabel(tokenStatus)}
+            hint={tokenHint(tokenStatus)}
+          />
+          <StatCard
+            label="Last pull"
             value={config?.lastSyncAt ? relativeTime(config.lastSyncAt) : "Never"}
           />
-          <StatCard label="Webhook topics" value={`${WEBHOOK_TOPICS.length}`} hint="Configured" />
-          <StatCard label="Failed webhooks" value={failedCount} hint="All time" />
+          <StatCard label="Failed events" value={failedCount} hint="All time" />
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <SectionCard title="Store credentials">
             <div className="p-5 space-y-4 text-sm">
               <Field label="Store URL" value={storeUrl ?? "Not set"} />
-              <Field label="Admin API key" value={apiKey ?? "Not set"} mono />
+              <Field label="API version" value={apiVersion} mono />
+              <Field label="Client ID" value={clientId ?? "Not set"} mono />
+              <Field label="Client secret" value={clientSecret ?? "Not set"} mono />
+              <Field label="Admin API key (fallback)" value={apiKey ?? "Not set"} mono />
               <Field label="Webhook secret" value={webhookSecret ?? "Not set"} mono />
               <p className="text-xs text-muted-foreground pt-1">
-                Credentials are set via environment variables
-                (SHOPIFY_STORE_URL, SHOPIFY_ADMIN_API_KEY, SHOPIFY_WEBHOOK_SECRET)
-                and never stored in the database.
+                Set via environment variables (SHOPIFY_STORE_URL,
+                SHOPIFY_CLIENT_ID, SHOPIFY_CLIENT_SECRET, SHOPIFY_API_VERSION,
+                SHOPIFY_WEBHOOK_SECRET). The access token is minted from the
+                client credentials on demand and cached until it expires;
+                SHOPIFY_ADMIN_API_KEY is used only when no client credentials are
+                set.
               </p>
             </div>
           </SectionCard>
@@ -148,6 +163,23 @@ export default async function ShopifyPage() {
       </PageBody>
     </>
   );
+}
+
+function tokenLabel(s: TokenStatus): string {
+  if (s.state === "none") return "Not fetched";
+  if (s.state === "static") return "Static key";
+  return s.state === "valid" ? "Valid" : "Expired";
+}
+
+function tokenHint(s: TokenStatus): string {
+  if (s.state === "none") return "Minted on first pull";
+  if (s.state === "static") return "SHOPIFY_ADMIN_API_KEY";
+  const hours = Math.round(
+    (new Date(s.expiresAt).getTime() - Date.now()) / 3_600_000,
+  );
+  return s.state === "valid"
+    ? `~${Math.max(0, hours)}h left`
+    : "Regenerates on next pull";
 }
 
 function Field({ label, value, mono }: { label: string; value: string; mono?: boolean }) {

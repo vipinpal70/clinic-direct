@@ -94,7 +94,7 @@ model Clinic {
   name            String
   code            String          @unique
   tag             ClinicTag       @default(clinic) // clinic vs individual client/patient
-  shopifyCustomerId String?       // source Shopify customer id (traceability)
+  shopifyCustomerId String?       // stable Shopify identity — the primary match key on ingest (see lib/shopify-ingest.ts)
   businessName    String?         // parsed from the Shopify customer note
   vatNumber       String?         // parsed from the Shopify customer note
   email           String
