@@ -18,6 +18,13 @@ enum ClinicStatus {
   inactive
 }
 
+// Distinguishes clinic records from individual client/patient records —
+// both live in the `clinics` collection, bifurcated by the Shopify `tags` field.
+enum ClinicTag {
+  clinic
+  client
+}
+
 enum AgreementStatus {
   not_sent
   sent
@@ -86,6 +93,10 @@ model Clinic {
   id              String          @id @default(auto()) @map("_id") @db.ObjectId
   name            String
   code            String          @unique
+  tag             ClinicTag       @default(clinic) // clinic vs individual client/patient
+  shopifyCustomerId String?       // source Shopify customer id (traceability)
+  businessName    String?         // parsed from the Shopify customer note
+  vatNumber       String?         // parsed from the Shopify customer note
   email           String
   phone           String?
   status          ClinicStatus    @default(pending)
