@@ -1,4 +1,3 @@
-```bash
 #!/bin/bash
 
 # Exit immediately if a command exits with a non-zero status
@@ -9,20 +8,57 @@ set -e
 # -----------------------------
 PM2_APP_NAME="clinic-direct"
 NGINX_SERVICE="nginx"
-PROJECT_DIR="$(pwd)"
+
+# Deploy target on the server. Override at call time:
+#   TARGET_DIR=/srv/apps/clinic ./deploy.sh
+TARGET_DIR="${TARGET_DIR:-/home/ubuntu/clinic-direct}"
+
+# Repo + branch to deploy. Auto-detected when this script runs from an
+# existing checkout; override with REPO_URL=... DEPLOY_BRANCH=... ./deploy.sh
+REPO_URL="${REPO_URL:-$(git config --get remote.origin.url 2>/dev/null || echo "https://github.com/vipinpal70/clinic-direct.git")}"
+DEPLOY_BRANCH="${DEPLOY_BRANCH:-$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "master")}"
 
 echo "=========================================="
-CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "main")
 echo "Starting deployment"
-echo "Branch : $CURRENT_BRANCH"
-echo "Project: $PROJECT_DIR"
+echo "Target : $TARGET_DIR"
+echo "Repo   : $REPO_URL"
+echo "Branch : $DEPLOY_BRANCH"
 echo "=========================================="
+
+# -----------------------------
+# Step 0 - Ensure target folder exists
+# -----------------------------
+if [ ! -d "$TARGET_DIR/.git" ]; then
+    echo "📁 Step 0: '$TARGET_DIR' is not a git checkout — creating it..."
+
+    # Create the folder; fall back to sudo when the parent isn't writable
+    if ! mkdir -p "$TARGET_DIR" 2>/dev/null; then
+        sudo mkdir -p "$TARGET_DIR"
+    fi
+
+    # Hand ownership to the current user so git / npm / pm2 can write
+    sudo chown -R "$(id -un):$(id -gn)" "$TARGET_DIR"
+    chmod -R u+rwX "$TARGET_DIR"
+
+    echo "📥 Cloning '$DEPLOY_BRANCH' into '$TARGET_DIR'..."
+    git clone --branch "$DEPLOY_BRANCH" "$REPO_URL" "$TARGET_DIR"
+fi
+
+cd "$TARGET_DIR"
+PROJECT_DIR="$(pwd)"
+echo "Project: $PROJECT_DIR"
+
+if [ ! -f .env ] && [ ! -f .env.production ]; then
+    echo "⚠️  No .env / .env.production in $PROJECT_DIR — add it before the build step."
+fi
 
 # -----------------------------
 # Step 1 - Pull latest code
 # -----------------------------
 echo "🚀 Step 1: Pulling latest changes..."
-git pull origin "$CURRENT_BRANCH"
+git fetch origin "$DEPLOY_BRANCH"
+git checkout "$DEPLOY_BRANCH"
+git pull origin "$DEPLOY_BRANCH"
 
 # -----------------------------
 # Step 2 - Install dependencies
@@ -110,4 +146,3 @@ echo "=========================================="
 echo ""
 echo "Application Status:"
 pm2 status "$PM2_APP_NAME"
-```
