@@ -152,6 +152,10 @@ export default async function ApprovalsPage() {
                       agreementLocked={c.agreementLocked}
                       agreementSignedName={c.agreementSignedName ?? null}
                       detailsSubmitted={Boolean(c.detailsSubmittedAt)}
+                      emailSentCount={c.emailSentCount}
+                      emailSentAt={
+                        c.emailSentAt ? c.emailSentAt.toISOString() : null
+                      }
                     />
                     <ApproveButton clinicId={c.id} disabled={c.agreement !== "accepted"} />
                   </div>

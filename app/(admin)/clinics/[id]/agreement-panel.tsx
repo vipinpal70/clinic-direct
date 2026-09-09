@@ -2,9 +2,10 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Copy, Check, Send, Lock } from "lucide-react";
+import { Copy, Check, Send, Lock, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { StatusPill } from "@/components/shared/status-pill";
+import { notifyEmailSent, notifyEmailFailed } from "@/lib/toast";
 
 interface Props {
   clinicId: string;
@@ -16,6 +17,8 @@ interface Props {
   agreementLocked: boolean;
   agreementSignedName: string | null;
   detailsSubmitted: boolean;
+  emailSentCount: number;
+  emailSentAt: string | null;
 }
 
 function CopyLink({ label, path }: { label: string; path: string }) {
@@ -60,6 +63,8 @@ export function AgreementPanel({
   agreementLocked,
   agreementSignedName,
   detailsSubmitted,
+  emailSentCount,
+  emailSentAt,
 }: Props) {
   const router = useRouter();
   const [pct, setPct] = useState(String(agreementCommissionPct ?? commissionPct));
@@ -69,6 +74,30 @@ export function AgreementPanel({
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sentLink, setSentLink] = useState<string | null>(null);
+
+  const [profileSending, setProfileSending] = useState(false);
+  const [profileMsg, setProfileMsg] = useState<string | null>(null);
+  const [profileError, setProfileError] = useState<string | null>(null);
+
+  async function handleSendProfileEmail() {
+    setProfileError(null);
+    setProfileMsg(null);
+    setProfileSending(true);
+    const res = await fetch(`/api/clinics/${clinicId}/profile-email`, {
+      method: "POST",
+    });
+    setProfileSending(false);
+    if (res.ok) {
+      setProfileMsg("Profile email sent.");
+      notifyEmailSent("Profile completion");
+      router.refresh();
+    } else {
+      const body = await res.json().catch(() => ({}));
+      const msg = body.error ?? "Failed to send profile email";
+      setProfileError(msg);
+      notifyEmailFailed("Profile completion", msg);
+    }
+  }
 
   const statusTone =
     agreement === "accepted"
@@ -94,10 +123,20 @@ export function AgreementPanel({
     if (res.ok) {
       const { data } = await res.json();
       setSentLink(data.link);
+      if (data.emailed === false) {
+        setError(
+          `Agreement saved, but the email could not be sent: ${data.emailError ?? "unknown error"}`,
+        );
+        notifyEmailFailed("Agreement", data.emailError);
+      } else {
+        notifyEmailSent("Agreement");
+      }
       router.refresh();
     } else {
       const body = await res.json().catch(() => ({}));
-      setError(body.error ?? "Failed to send agreement");
+      const msg = body.error ?? "Failed to send agreement";
+      setError(msg);
+      notifyEmailFailed("Agreement", msg);
     }
   }
 
@@ -113,9 +152,40 @@ export function AgreementPanel({
         </div>
         <p className="text-xs text-muted-foreground">
           Send this to the clinic to collect bank &amp; tax details Shopify
-          can&apos;t provide.
+          can&apos;t provide. The first email is sent automatically when the
+          clinic is imported.
         </p>
         <CopyLink label="Public intake URL" path={`/clinic/details/${code}`} />
+
+        <div className="flex items-center justify-between gap-3 pt-1">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={handleSendProfileEmail}
+            disabled={profileSending}
+          >
+            <Mail className="h-4 w-4" />
+            {profileSending
+              ? "Sending…"
+              : emailSentCount > 0
+                ? "Resend profile email"
+                : "Send profile email"}
+          </Button>
+          <span className="text-xs text-muted-foreground">
+            {emailSentCount > 0
+              ? `Sent ${emailSentCount} time${emailSentCount === 1 ? "" : "s"}${
+                  emailSentAt
+                    ? ` · last ${new Date(emailSentAt).toLocaleDateString()}`
+                    : ""
+                }`
+              : "Not sent yet"}
+          </span>
+        </div>
+        {profileMsg && <p className="text-xs text-emerald-600">{profileMsg}</p>}
+        {profileError && (
+          <p className="text-xs text-destructive">{profileError}</p>
+        )}
       </div>
 
       <div className="border-t border-border" />
@@ -174,6 +244,11 @@ export function AgreementPanel({
             </div>
 
             {error && <p className="text-sm text-destructive">{error}</p>}
+
+            <p className="text-xs text-muted-foreground">
+              This freezes the agreement and emails the consent link to the
+              clinic at <span className="font-medium">its email address</span>.
+            </p>
 
             <Button size="sm" onClick={handleSend} disabled={sending}>
               <Send className="h-4 w-4" />

@@ -38,7 +38,7 @@ export interface Clinic {
   status: ClinicStatus;
   agreement: AgreementStatus;
   commissionPct: number;
-  joined: string;
+  joined?: string | Date | null;
   address?: string;
   website?: string;
   notes?: string;

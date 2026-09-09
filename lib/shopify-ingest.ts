@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { resolveCommissionPct, computeCommission } from "@/lib/commission";
+import { sendProfileCompletionEmail } from "@/lib/mailer";
 import {
   transformCustomer,
   transformOrder,
@@ -101,6 +102,31 @@ async function updateClinic(
   }
 }
 
+// Send the profile-completion email on first ingest and record the send. An SMTP
+// failure must never break ingest — we log and move on, leaving the counter at 0
+// so the admin can retry from the "Resend" button.
+async function sendFirstProfileEmail(clinic: {
+  id: string;
+  name: string;
+  code: string;
+  email: string;
+  tag: string;
+}) {
+  if (clinic.tag !== "clinic" || !clinic.email) return;
+  try {
+    await sendProfileCompletionEmail(clinic);
+    await prisma.clinic.update({
+      where: { id: clinic.id },
+      data: { emailSentCount: 1, emailSentAt: new Date() },
+    });
+  } catch (error) {
+    console.error(
+      `Failed to send profile-completion email to clinic ${clinic.code}:`,
+      error instanceof Error ? error.message : error,
+    );
+  }
+}
+
 async function upsertCustomer(record: CustomerRecord) {
   const existing = await findExistingClinic(record);
   if (existing) {
@@ -108,7 +134,7 @@ async function upsertCustomer(record: CustomerRecord) {
   }
 
   try {
-    return await prisma.clinic.create({
+    const created = await prisma.clinic.create({
       data: {
         name: record.name,
         code: record.code,
@@ -127,6 +153,9 @@ async function upsertCustomer(record: CustomerRecord) {
         loginHash: record.loginHash,
       },
     });
+    // New clinic → trigger the "complete your profile" email once.
+    await sendFirstProfileEmail(created);
+    return created;
   } catch (error) {
     if (!isUniqueViolation(error)) throw error;
     // A concurrent webhook / pull created the row between our find and create —

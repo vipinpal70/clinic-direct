@@ -24,6 +24,7 @@ import { currency, dateFmt, relativeTime } from "@/lib/utils";
 import type { ClinicStatus } from "@/types";
 import { EditClinicDialog } from "./edit-clinic-dialog";
 import { AgreementPanel } from "./agreement-panel";
+import { SendAgreementDialog } from "@/components/clinics/send-agreement-dialog";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -66,6 +67,18 @@ export default async function ClinicProfilePage({ params }: Props) {
                 All clinics
               </Link>
             </Button>
+            <SendAgreementDialog
+              clinic={{
+                id: clinic.id,
+                name: clinic.name,
+                email: clinic.email,
+                code: clinic.code,
+                commissionPct: clinic.commissionPct,
+                agreement: clinic.agreement,
+                agreementLocked: clinic.agreementLocked,
+              }}
+              variant="default"
+            />
             <EditClinicDialog
               clinic={{
                 id: clinic.id,
@@ -233,6 +246,10 @@ export default async function ClinicProfilePage({ params }: Props) {
                 agreementLocked={clinic.agreementLocked}
                 agreementSignedName={clinic.agreementSignedName ?? null}
                 detailsSubmitted={Boolean(clinic.detailsSubmittedAt)}
+                emailSentCount={clinic.emailSentCount}
+                emailSentAt={
+                  clinic.emailSentAt ? clinic.emailSentAt.toISOString() : null
+                }
               />
             </SectionCard>
 

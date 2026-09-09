@@ -19,7 +19,7 @@ export async function GET() {
     const rows = clinics.map((c) => [
       c.name, c.code, c.email, c.phone ?? "", c.status, c.agreement,
       c.commissionPct, c.ordersMtd, c.monthSales, c.totalCommission,
-      c.joined.toISOString().slice(0, 10),
+      c.joined ? new Date(c.joined).toISOString().slice(0, 10) : "",
     ]);
 
     const csv = [header, ...rows]

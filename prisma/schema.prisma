@@ -102,12 +102,17 @@ model Clinic {
   status          ClinicStatus    @default(pending)
   agreement       AgreementStatus @default(not_sent)
   commissionPct   Float           @default(12)
-  joined          DateTime        @default(now())
+  joined          DateTime?       @default(now())
   address         String?
   website         String?
   notes           String?
   loginEmail      String?
   loginHash       String?         // bcrypt hash of portal password
+
+  // Profile-completion email tracking. First send is automatic on ingest
+  // (see lib/shopify-ingest.ts); subsequent sends are the admin "Resend" button.
+  emailSentCount  Int             @default(0)
+  emailSentAt     DateTime?
 
   // Clinic-supplied intake (public page → Step 1)
   bankDetails        BankDetails?

@@ -24,6 +24,8 @@ interface Props {
   agreementLocked: boolean;
   agreementSignedName: string | null;
   detailsSubmitted: boolean;
+  emailSentCount: number;
+  emailSentAt: string | null;
 }
 
 export function AgreementDialog(props: Props) {
@@ -56,6 +58,8 @@ export function AgreementDialog(props: Props) {
             agreementLocked={props.agreementLocked}
             agreementSignedName={props.agreementSignedName}
             detailsSubmitted={props.detailsSubmitted}
+            emailSentCount={props.emailSentCount}
+            emailSentAt={props.emailSentAt}
           />
         </div>
       </DialogContent>

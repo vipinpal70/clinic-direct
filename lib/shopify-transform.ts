@@ -186,9 +186,27 @@ function formatAddress(addr?: ShopifyAddress | null): string | null {
 }
 
 /**
- * Resolves the unique upsert code for a customer. Real clinic codes come from
- * the note; everything else gets a deterministic synthetic code derived from the
- * Shopify customer id so nothing is ever skipped and uniqueness holds.
+ * Derives a clinic code from an email's local part: everything before the first
+ * `@`, with every run of non-alphanumeric characters (`.`, `+`, etc.) collapsed
+ * to `-`, surrounding dashes trimmed, and upper-cased to match our codes.
+ * e.g. `vuilive.digital@gmail.com` → `VUILIVE-DIGITAL`. Returns null when the
+ * email has no usable local part.
+ */
+export function codeFromEmail(email?: string | null): string | null {
+  if (!email) return null;
+  const local = email.split("@")[0] ?? "";
+  const code = local
+    .replace(/[^a-zA-Z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .toUpperCase();
+  return code || null;
+}
+
+/**
+ * Resolves the unique upsert code for a customer. Clinic codes are derived from
+ * the email local part (see `codeFromEmail`), falling back to the note code and
+ * then a deterministic synthetic id; everything else gets a synthetic code from
+ * the Shopify customer id so nothing is ever skipped and uniqueness holds.
  */
 export function resolveCustomerCode(
   customer: ShopifyCustomer,
@@ -197,6 +215,8 @@ export function resolveCustomerCode(
 ): string {
   const shopifyId = String(customer.id);
   if (tag === "clinic") {
+    const emailCode = codeFromEmail(customer.email);
+    if (emailCode) return emailCode;
     if (parsed.clinicCode) return parsed.clinicCode.trim().toUpperCase();
     return `CLINIC-${shopifyId}`;
   }

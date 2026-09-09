@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { getClinicsWithStats } from "@/lib/stats";
 import { currency, dateFmt } from "@/lib/utils";
 import type { ClinicStatus } from "@/types";
-import { AddClinicDialog } from "./add-clinic-dialog";
+import { SendAgreementDialog } from "@/components/clinics/send-agreement-dialog";
 import { ClinicFilters } from "./clinic-filters";
 import { ImportExportButtons } from "./import-export-buttons";
 
@@ -132,9 +132,22 @@ export default async function ClinicsPage({ searchParams }: Props) {
                       {dateFmt(c.joined)}
                     </td>
                     <td className="py-3 pr-5 text-right">
-                      <Button variant="ghost" size="sm" asChild>
-                        <Link href={`/clinics/${c.id}`}>View</Link>
-                      </Button>
+                      <div className="flex items-center justify-end gap-1.5">
+                        <SendAgreementDialog
+                          clinic={{
+                            id: c.id,
+                            name: c.name,
+                            email: c.email,
+                            code: c.code,
+                            commissionPct: c.commissionPct,
+                            agreement: c.agreement,
+                            agreementLocked: c.agreementLocked,
+                          }}
+                        />
+                        <Button variant="ghost" size="sm" asChild>
+                          <Link href={`/clinics/${c.id}`}>View</Link>
+                        </Button>
+                      </div>
                     </td>
                   </tr>
                 ))}

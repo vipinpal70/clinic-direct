@@ -23,24 +23,33 @@ export function currencyExact(value: number, locale = "en-GB"): string {
   }).format(value);
 }
 
-export function dateFmt(date: Date | string): string {
+export function dateFmt(date: Date | string | null | undefined): string {
+  if (!date) return "—";
+  const d = new Date(date);
+  if (isNaN(d.getTime())) return "—";
   return new Intl.DateTimeFormat("en-GB", {
     day: "numeric",
     month: "short",
     year: "numeric",
-  }).format(new Date(date));
+  }).format(d);
 }
 
-export function timeFmt(date: Date | string): string {
+export function timeFmt(date: Date | string | null | undefined): string {
+  if (!date) return "—";
+  const d = new Date(date);
+  if (isNaN(d.getTime())) return "—";
   return new Intl.DateTimeFormat("en-GB", {
     hour: "2-digit",
     minute: "2-digit",
-  }).format(new Date(date));
+  }).format(d);
 }
 
-export function relativeTime(date: Date | string): string {
+export function relativeTime(date: Date | string | null | undefined): string {
+  if (!date) return "—";
+  const d = new Date(date);
+  if (isNaN(d.getTime())) return "—";
   const now = Date.now();
-  const then = new Date(date).getTime();
+  const then = d.getTime();
   const diff = now - then;
 
   const minute = 60_000;
@@ -51,7 +60,7 @@ export function relativeTime(date: Date | string): string {
   if (diff < hour) return `${Math.floor(diff / minute)}m ago`;
   if (diff < day) return `${Math.floor(diff / hour)}h ago`;
   if (diff < 2 * day) return "Yesterday";
-  return dateFmt(date);
+  return dateFmt(d);
 }
 
 export function initials(name: string): string {
