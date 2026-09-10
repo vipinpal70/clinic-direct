@@ -18,6 +18,19 @@ export async function requireSession() {
   return session;
 }
 
+/**
+ * Requires an authenticated session whose role is one of `roles`. Throws 403
+ * otherwise. Use to enforce role restrictions on the server so protected actions
+ * can't be reached by directly calling the API (never rely on hidden UI alone).
+ */
+export async function requireRole(roles: readonly string[]) {
+  const session = await requireSession();
+  if (!roles.includes(session.user.role)) {
+    throw new ApiError(403, "You do not have permission to perform this action");
+  }
+  return session;
+}
+
 export function handleApiError(error: unknown) {
   if (error instanceof ApiError) {
     return NextResponse.json({ error: error.message }, { status: error.status });

@@ -9,6 +9,9 @@ const updateSchema = z.object({
   notes: z.string().optional(),
 });
 
+/** Roles permitted to mark an invoice as paid. */
+const PAY_ROLES = ["finance"] as const;
+
 interface Params {
   params: Promise<{ id: string }>;
 }
@@ -36,6 +39,18 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
     const existing = await prisma.invoice.findUnique({ where: { id } });
     if (!existing) throw new ApiError(404, "Invoice not found");
+
+    // Marking an invoice paid is a protected, finance-only action. Enforced on
+    // the server so it can't be bypassed by calling the API directly.
+    if (input.status === "paid") {
+      if (!PAY_ROLES.includes(session.user.role as (typeof PAY_ROLES)[number])) {
+        throw new ApiError(403, "Only finance users can mark invoices as paid");
+      }
+      // Guard against duplicate / unintended payment updates.
+      if (existing.status === "paid") {
+        throw new ApiError(409, "Invoice is already marked as paid");
+      }
+    }
 
     const invoice = await prisma.invoice.update({
       where: { id },

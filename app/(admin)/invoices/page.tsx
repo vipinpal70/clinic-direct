@@ -5,9 +5,14 @@ import { StatCard } from "@/components/shared/stat-card";
 import { StatusPill } from "@/components/shared/status-pill";
 import { Button } from "@/components/ui/button";
 import { prisma } from "@/lib/prisma";
+import { getSessionFromCookies } from "@/lib/session";
 import { currency, currencyExact, dateFmt } from "@/lib/utils";
 import type { InvoiceStatus } from "@/types";
-import { GenerateInvoicesButton, PushQueuedButton } from "./invoice-actions";
+import {
+  GenerateInvoicesButton,
+  PushQueuedButton,
+  InvoiceRowActions,
+} from "./invoice-actions";
 
 export const metadata = { title: "Self-billed invoices" };
 export const dynamic = "force-dynamic";
@@ -24,9 +29,12 @@ const statusTone: Record<
 };
 
 export default async function InvoicesPage() {
+  const session = await getSessionFromCookies();
+  const canMarkPaid = session?.user.role === "finance";
+
   const [invoices, generatable] = await Promise.all([
     prisma.invoice.findMany({
-      include: { clinic: { select: { name: true, code: true } } },
+      include: { clinic: { select: { name: true, code: true, email: true } } },
       orderBy: { createdAt: "desc" },
     }),
     // Periods that actually have approved, not-yet-invoiced commissions.
@@ -124,14 +132,23 @@ export default async function InvoicesPage() {
                       </StatusPill>
                     </td>
                     <td className="py-3 pr-5 text-right">
-                      <a
-                        href={`/api/invoices/${inv.id}`}
-                        download={`${inv.number}.json`}
-                        className="h-7 w-7 rounded-md hover:bg-accent inline-flex items-center justify-center text-muted-foreground transition-colors"
-                        aria-label="Download invoice data"
-                      >
-                        <Download className="h-4 w-4" />
-                      </a>
+                      <div className="flex items-center justify-end gap-1.5">
+                        <InvoiceRowActions
+                          invoiceId={inv.id}
+                          number={inv.number}
+                          status={inv.status}
+                          canMarkPaid={canMarkPaid}
+                          hasClinicEmail={Boolean(inv.clinic?.email?.trim())}
+                        />
+                        <a
+                          href={`/api/invoices/${inv.id}/pdf`}
+                          download={`${inv.number}.pdf`}
+                          className="h-7 w-7 rounded-md hover:bg-accent inline-flex items-center justify-center text-muted-foreground transition-colors"
+                          aria-label="Download invoice PDF"
+                        >
+                          <Download className="h-4 w-4" />
+                        </a>
+                      </div>
                     </td>
                   </tr>
                 ))}

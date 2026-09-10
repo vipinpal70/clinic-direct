@@ -2,8 +2,9 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { FileDown, Send } from "lucide-react";
+import { FileDown, Send, Mail, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { notifyEmailSent, notifyEmailFailed, toast } from "@/lib/toast";
 
 interface PeriodOption {
   period: string;
@@ -68,6 +69,98 @@ export function GenerateInvoicesButton({ periods }: { periods: PeriodOption[] })
         </Button>
       </div>
       {message && <span className="text-xs text-muted-foreground">{message}</span>}
+    </div>
+  );
+}
+
+interface RowActionsProps {
+  invoiceId: string;
+  number: string;
+  status: string;
+  /** True only for finance users — gates the "Mark as Paid" action. */
+  canMarkPaid: boolean;
+  /** Whether the clinic has an email on file (disables "Send Invoice" if not). */
+  hasClinicEmail: boolean;
+}
+
+/** Per-invoice actions: Send Invoice (email) and Mark as Paid (finance-only). */
+export function InvoiceRowActions({
+  invoiceId,
+  number,
+  status,
+  canMarkPaid,
+  hasClinicEmail,
+}: RowActionsProps) {
+  const router = useRouter();
+  const [sending, setSending] = useState(false);
+  const [paying, setPaying] = useState(false);
+  const isPaid = status === "paid";
+
+  async function handleSend() {
+    setSending(true);
+    try {
+      const res = await fetch(`/api/invoices/${invoiceId}/send`, {
+        method: "POST",
+      });
+      const body = await res.json().catch(() => null);
+      if (res.ok) {
+        notifyEmailSent("Invoice", body?.recipient);
+      } else {
+        notifyEmailFailed("Invoice", body?.error ?? "Please try again");
+      }
+    } catch {
+      notifyEmailFailed("Invoice", "Network error");
+    } finally {
+      setSending(false);
+    }
+  }
+
+  async function handleMarkPaid() {
+    setPaying(true);
+    try {
+      const res = await fetch(`/api/invoices/${invoiceId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "paid" }),
+      });
+      const body = await res.json().catch(() => null);
+      if (res.ok) {
+        toast.success(`Invoice ${number} marked as paid`);
+        router.refresh(); // reflect the new status immediately
+      } else {
+        toast.error(body?.error ?? "Could not update invoice status");
+      }
+    } catch {
+      toast.error("Network error while updating invoice");
+    } finally {
+      setPaying(false);
+    }
+  }
+
+  return (
+    <div className="flex items-center justify-end gap-1.5">
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={handleSend}
+        disabled={sending || !hasClinicEmail}
+        title={
+          hasClinicEmail
+            ? "Email this invoice to the clinic"
+            : "Clinic has no email address on file"
+        }
+      >
+        <Mail className="h-4 w-4" />
+        {sending ? "Sending…" : "Send"}
+      </Button>
+
+      {/* Mark as Paid is finance-only and hidden once the invoice is paid. */}
+      {canMarkPaid && !isPaid && (
+        <Button size="sm" onClick={handleMarkPaid} disabled={paying}>
+          <CheckCircle2 className="h-4 w-4" />
+          {paying ? "Saving…" : "Mark paid"}
+        </Button>
+      )}
     </div>
   );
 }
