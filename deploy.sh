@@ -71,6 +71,12 @@ else
     npm install
 fi
 
+# Regenerate the Prisma client from prisma/schema.prisma. `next build` doesn't
+# do this, and npm may skip @prisma/client's postinstall (which normally does),
+# leaving a stale client that fails the build after a schema change.
+echo "🧬 Step 2b: Generating Prisma client..."
+npm run db:generate
+
 # -----------------------------
 # Step 3 - Build application
 # -----------------------------
