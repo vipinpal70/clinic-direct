@@ -16,6 +16,7 @@ import {
 	ChevronDown,
 	LogOut,
 	User,
+	Webhook,
 } from "lucide-react";
 import { cn, initials } from "@/lib/utils";
 import { canAccessPath } from "@/lib/roles";
@@ -66,7 +67,10 @@ const NAV = [
 	// },
 	{
 		section: "System",
-		items: [{ label: "Users", to: "/users", icon: Users }],
+		items: [
+			{ label: "Users", to: "/users", icon: Users },
+			{ label: "Audit", to: "/audit", icon: Webhook },
+		],
 	},
 ];
 

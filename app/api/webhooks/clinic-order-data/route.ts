@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { withWebhookCapture } from "@/lib/webhook-capture";
 import { ingestOrders } from "@/lib/shopify-ingest";
 import type { ShopifyOrder } from "@/lib/shopify-transform";
 
@@ -28,8 +29,9 @@ function extractOrders(payload: unknown): ShopifyOrder[] {
   return [];
 }
 
-export async function POST(req: NextRequest) {
-  const rawBody = await req.text();
+// Every delivery (accepted or rejected) is captured raw in `webhook_events`
+// by withWebhookCapture — see lib/webhook-capture.ts.
+export const POST = withWebhookCapture("clinic-order-data", async (req: NextRequest, rawBody: string) => {
 
   if (!guard(req)) {
     return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
@@ -56,4 +58,4 @@ export async function POST(req: NextRequest) {
     withoutClinic: result.withoutClinic,
     ...(result.errors.length ? { errors: result.errors } : {}),
   });
-}
+});

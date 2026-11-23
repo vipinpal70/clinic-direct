@@ -309,3 +309,42 @@ model WebhookLog {
   @@index([status])
   @@map("webhook_logs")
 }
+
+// Raw capture of EVERY inbound webhook HTTP request — one row per delivery,
+// append-only, written before any auth/parse check can reject it (see
+// lib/webhook-capture.ts). `WebhookLog` above records processing outcome per
+// resource; this records exactly what the sender delivered, for debugging and
+// for discovering the real payload shape (Integrations → Webhook events).
+model WebhookEvent {
+  id             String    @id @default(auto()) @map("_id") @db.ObjectId
+  endpoint       String    // "shopify" | "clinic-data" | "clinic-order-data"
+  method         String?   // HTTP method, e.g. "POST"
+  url            String?   // full request URL as the caller saw it; secret-looking query values redacted
+  topic          String?   // X-Shopify-Topic, e.g. "orders/create"
+  shopDomain     String?   // X-Shopify-Shop-Domain
+  webhookId      String?   // X-Shopify-Webhook-Id — identical across Shopify retries
+  eventId        String?   // X-Shopify-Event-Id
+  apiVersion     String?   // X-Shopify-API-Version — decides the payload shape
+  triggeredAt    DateTime? // X-Shopify-Triggered-At
+  headers        Json?     // allow-listed headers; secrets stored as "[redacted]"
+  payload        Json?     // parsed JSON body, exactly as received
+  rawBody        String?   // only when the body isn't valid JSON or is too large to store parsed
+  bodyBytes      Int       @default(0)
+  resourceId     String?   // top-level `id` of a single-object payload
+  recordCount    Int?      // records in the body (1, or the batch array length)
+  signatureValid Boolean?  // Shopify HMAC check; null when no header or no secret configured
+  status         String    // "received" | "processed" | "failed" | "rejected" | "error"
+  httpStatus     Int?      // status we replied with
+  response       Json?     // body we replied with (summarised when large)
+  error          String?
+  durationMs     Int?
+  receivedAt     DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([endpoint, receivedAt])
+  @@index([topic, receivedAt])
+  @@index([status])
+  @@index([webhookId])
+  @@index([receivedAt])
+  @@map("webhook_events")
+}

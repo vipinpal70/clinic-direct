@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import crypto from "crypto";
 import { prisma } from "@/lib/prisma";
 import { resolveCommissionPct, computeCommission } from "@/lib/commission";
+import { verifyShopifyHmac, withWebhookCapture } from "@/lib/webhook-capture";
 
 interface ShopifyOrderPayload {
   id: number;
@@ -14,22 +14,15 @@ interface ShopifyOrderPayload {
   note_attributes?: { name: string; value: string }[];
 }
 
-function verifySignature(rawBody: string, signature: string | null, secret: string) {
-  if (!signature) return false;
-  const digest = crypto.createHmac("sha256", secret).update(rawBody, "utf8").digest("base64");
-  const a = Buffer.from(digest);
-  const b = Buffer.from(signature);
-  return a.length === b.length && crypto.timingSafeEqual(a, b);
-}
-
-export async function POST(req: NextRequest) {
-  const rawBody = await req.text();
+// Every delivery (accepted or rejected) is captured raw in `webhook_events`
+// by withWebhookCapture — see lib/webhook-capture.ts.
+export const POST = withWebhookCapture("shopify", async (req: NextRequest, rawBody: string) => {
   const topic = req.headers.get("x-shopify-topic") ?? "unknown";
   const secret = process.env.SHOPIFY_WEBHOOK_SECRET;
 
   if (secret) {
     const signature = req.headers.get("x-shopify-hmac-sha256");
-    if (!verifySignature(rawBody, signature, secret)) {
+    if (!verifyShopifyHmac(rawBody, signature, secret)) {
       return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
     }
   }
@@ -101,7 +94,7 @@ export async function POST(req: NextRequest) {
     // (e.g. an order with no recognisable clinic code) while still recording the failure.
     return NextResponse.json({ received: true, warning: message });
   }
-}
+});
 
 async function processShopifyOrder(topic: string, payload: ShopifyOrderPayload) {
   if (!topic.startsWith("orders/")) return;

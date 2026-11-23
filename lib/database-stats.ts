@@ -9,6 +9,7 @@ const COLLECTIONS = [
   "admin_users",
   "audit_logs",
   "webhook_logs",
+  "webhook_events",
 ] as const;
 
 interface CollStats {

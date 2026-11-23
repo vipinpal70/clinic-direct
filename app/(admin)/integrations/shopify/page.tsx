@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { CheckCircle2, ExternalLink } from "lucide-react";
 import { PageHeader, PageBody } from "@/components/shared/page-header";
 import { SectionCard } from "@/components/shared/section-card";
@@ -7,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { prisma } from "@/lib/prisma";
 import { relativeTime } from "@/lib/utils";
 import { getTokenStatus, shopifyConfigured, type TokenStatus } from "@/lib/shopify";
+import { getSessionFromCookies } from "@/lib/session";
+import { isAdminRole } from "@/lib/roles";
 import { ApiPullButton } from "./shopify-actions";
 
 export const metadata = { title: "Shopify" };
@@ -25,7 +28,7 @@ function mask(value: string | undefined) {
 }
 
 export default async function ShopifyPage() {
-  const [config, recentLogs, failedCount, tokenStatus] = await Promise.all([
+  const [config, recentLogs, failedCount, tokenStatus, session] = await Promise.all([
     prisma.integrationConfig.findUnique({ where: { provider: "shopify" } }),
     prisma.webhookLog.findMany({
       where: { provider: "shopify" },
@@ -34,7 +37,9 @@ export default async function ShopifyPage() {
     }),
     prisma.webhookLog.count({ where: { provider: "shopify", status: "failed" } }),
     getTokenStatus(),
+    getSessionFromCookies(),
   ]);
+  const canViewAudit = isAdminRole(session?.user.role);
 
   const storeUrl = process.env.SHOPIFY_STORE_URL;
   const clientId = mask(process.env.SHOPIFY_CLIENT_ID);
@@ -124,7 +129,16 @@ export default async function ShopifyPage() {
           </SectionCard>
         </div>
 
-        <SectionCard title="Recent sync logs">
+        <SectionCard
+          title="Recent sync logs"
+          actions={
+            canViewAudit ? (
+              <Button variant="outline" size="sm" asChild>
+                <Link href="/audit">View webhook audit</Link>
+              </Button>
+            ) : undefined
+          }
+        >
           {recentLogs.length === 0 ? (
             <div className="py-12 text-center text-sm text-muted-foreground">
               No webhook activity recorded yet.
