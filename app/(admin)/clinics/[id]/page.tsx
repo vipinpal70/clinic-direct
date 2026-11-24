@@ -58,7 +58,7 @@ export default async function ClinicProfilePage({ params }: Props) {
     <>
       <PageHeader
         title={clinic.name}
-        description={`${clinic.code} · Joined ${dateFmt(clinic.joined)}`}
+        description={`Clinic code: ${clinic.clinicCode ?? "—"} · Unique code: ${clinic.code} · Joined ${dateFmt(clinic.joined)}`}
         actions={
           <>
             <Button variant="outline" size="sm" asChild>
@@ -72,7 +72,7 @@ export default async function ClinicProfilePage({ params }: Props) {
                 id: clinic.id,
                 name: clinic.name,
                 email: clinic.email,
-                code: clinic.code,
+                code: clinic.clinicCode ?? clinic.code,
                 commissionPct: clinic.commissionPct,
                 agreement: clinic.agreement,
                 agreementLocked: clinic.agreementLocked,

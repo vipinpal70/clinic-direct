@@ -57,7 +57,7 @@ export async function GET(req: NextRequest) {
 
     const invoices = await prisma.invoice.findMany({
       where,
-      include: { clinic: { select: { name: true, code: true } } },
+      include: { clinic: { select: { name: true, code: true, clinicCode: true } } },
       orderBy: { createdAt: "desc" },
     });
 

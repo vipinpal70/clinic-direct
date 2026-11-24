@@ -7,7 +7,7 @@ import { StatCard } from "@/components/shared/stat-card";
 import { StatusPill } from "@/components/shared/status-pill";
 import { Button } from "@/components/ui/button";
 import { prisma } from "@/lib/prisma";
-import { currency, relativeTime } from "@/lib/utils";
+import { currency, displayClinicCode, relativeTime } from "@/lib/utils";
 import { OrderFilters } from "./order-filters";
 
 export const metadata = { title: "Orders" };
@@ -44,11 +44,11 @@ export default async function OrdersPage({ searchParams }: Props) {
   const [orders, clinics, totalCount, fulfilledCount, activeAgg] = await Promise.all([
     prisma.order.findMany({
       where,
-      include: { clinic: { select: { name: true, code: true } } },
+      include: { clinic: { select: { name: true, code: true, clinicCode: true } } },
       orderBy: { shopifyCreatedAt: "desc" },
       take: 100,
     }),
-    prisma.clinic.findMany({ select: { id: true, name: true, code: true }, orderBy: { name: "asc" } }),
+    prisma.clinic.findMany({ select: { id: true, name: true, code: true, clinicCode: true }, orderBy: { name: "asc" } }),
     prisma.order.count(),
     prisma.order.count({ where: { status: "fulfilled" } }),
     prisma.order.aggregate({
@@ -129,7 +129,7 @@ export default async function OrdersPage({ searchParams }: Props) {
                     </td>
                     <td className="py-2.5">{o.customerName ?? "—"}</td>
                     <td className="py-2.5">
-                      <div className="text-xs font-medium">{o.clinic?.code ?? "N/A"}</div>
+                      <div className="text-xs font-medium">{displayClinicCode(o.clinic) ?? "N/A"}</div>
                       <div className="text-[11px] text-muted-foreground">
                         {o.clinic?.name ?? "Unknown Clinic"}
                       </div>

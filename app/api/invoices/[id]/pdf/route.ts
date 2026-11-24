@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { displayClinicCode } from "@/lib/utils";
 import { requireSession, handleApiError, ApiError } from "@/lib/api-utils";
 import { generateInvoicePdf } from "@/lib/invoice-pdf";
 
@@ -17,12 +18,12 @@ export async function GET(_req: NextRequest, { params }: Params) {
 
     const invoice = await prisma.invoice.findUnique({
       where: { id },
-      include: { clinic: { select: { name: true, code: true } } },
+      include: { clinic: { select: { name: true, code: true, clinicCode: true } } },
     });
     if (!invoice) throw new ApiError(404, "Invoice not found");
 
     const pdf = await generateInvoicePdf(
-      { name: invoice.clinic?.name ?? "—", code: invoice.clinic?.code ?? "—" },
+      { name: invoice.clinic?.name ?? "—", code: displayClinicCode(invoice.clinic) ?? "—" },
       {
         number: invoice.number,
         commission: invoice.commission,

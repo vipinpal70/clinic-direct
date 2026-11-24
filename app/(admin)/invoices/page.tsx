@@ -34,7 +34,7 @@ export default async function InvoicesPage() {
 
   const [invoices, generatable] = await Promise.all([
     prisma.invoice.findMany({
-      include: { clinic: { select: { name: true, code: true, email: true } } },
+      include: { clinic: { select: { name: true, code: true, clinicCode: true, email: true } } },
       orderBy: { createdAt: "desc" },
     }),
     // Periods that actually have approved, not-yet-invoiced commissions.

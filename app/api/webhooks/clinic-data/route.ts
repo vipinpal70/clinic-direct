@@ -4,10 +4,12 @@ import { ingestCustomers } from "@/lib/shopify-ingest";
 import type { ShopifyCustomer } from "@/lib/shopify-transform";
 
 // POST /api/webhooks/clinic-data
-// Ingests Shopify customer(s), bifurcates them into clinic vs client by their
-// `tags`, reduces each to the lean reference structure (+ a `tag` field), and
-// upserts every record into the `clinics` collection. No customer is skipped —
-// code-less clinics and all clients get a deterministic synthetic code.
+// Ingests Shopify customer(s), bifurcates them into clinic vs client, reduces
+// each to the lean reference structure (+ a `tag` field), and upserts every
+// record into the `clinics` collection. A customer is a clinic when its `tags`
+// contain `clinic` or its `note` has a "Clinic code: …" line (webhook payloads
+// can omit `tags`). Each gets a permanent unique `code` (CUST-<shopifyId>); the
+// note's code is stored separately as `clinicCode`. No customer is skipped.
 //
 // The upsert logic is shared with the admin API pull — see lib/shopify-ingest.ts.
 

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { displayClinicCode } from "@/lib/utils";
 import { requireSession, handleApiError, ApiError } from "@/lib/api-utils";
 import { sendInvoiceEmail } from "@/lib/mailer";
 import { logAudit, ipFromRequest } from "@/lib/audit";
@@ -21,7 +22,7 @@ export async function POST(req: NextRequest, { params }: Params) {
 
     const invoice = await prisma.invoice.findUnique({
       where: { id },
-      include: { clinic: { select: { name: true, code: true, email: true } } },
+      include: { clinic: { select: { name: true, code: true, clinicCode: true, email: true } } },
     });
     if (!invoice) throw new ApiError(404, "Invoice not found");
     if (!invoice.clinic) {
@@ -38,7 +39,7 @@ export async function POST(req: NextRequest, { params }: Params) {
 
     try {
       await sendInvoiceEmail(
-        { name: invoice.clinic.name, code: invoice.clinic.code, email },
+        { name: invoice.clinic.name, code: displayClinicCode(invoice.clinic) ?? invoice.clinic.code, email },
         {
           number: invoice.number,
           commission: invoice.commission,

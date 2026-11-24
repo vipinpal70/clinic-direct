@@ -3,6 +3,7 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState, useTransition } from "react";
 import { Search } from "lucide-react";
+import { displayClinicCode } from "@/lib/utils";
 import {
   Select,
   SelectContent,
@@ -16,7 +17,7 @@ const STATUSES = ["pending", "processing", "fulfilled", "refunded", "cancelled"]
 export function OrderFilters({
   clinics,
 }: {
-  clinics: { id: string; name: string; code: string }[];
+  clinics: { id: string; name: string; code: string; clinicCode: string | null }[];
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -72,7 +73,7 @@ export function OrderFilters({
         <SelectContent>
           <SelectItem value="all">All clinics</SelectItem>
           {clinics.map((c) => (
-            <SelectItem key={c.id} value={c.id}>{c.code} · {c.name}</SelectItem>
+            <SelectItem key={c.id} value={c.id}>{displayClinicCode(c)} · {c.name}</SelectItem>
           ))}
         </SelectContent>
       </Select>

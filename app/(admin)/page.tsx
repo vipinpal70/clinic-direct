@@ -18,7 +18,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { RevenueChart, OrdersByProductChart } from "./dashboard-charts";
 import { prisma } from "@/lib/prisma";
 import { getClinicsWithStats, getDashboardStats } from "@/lib/stats";
-import { currency, dateFmt, relativeTime } from "@/lib/utils";
+import { currency, dateFmt, relativeTime, displayClinicCode } from "@/lib/utils";
 
 export const metadata = { title: "Dashboard" };
 export const dynamic = "force-dynamic";
@@ -30,7 +30,7 @@ export default async function DashboardPage() {
     prisma.order.findMany({
       orderBy: { shopifyCreatedAt: "desc" },
       take: 6,
-      include: { clinic: { select: { name: true, code: true } } },
+      include: { clinic: { select: { name: true, code: true, clinicCode: true } } },
     }),
     prisma.integrationConfig.findMany(),
   ]);
@@ -125,7 +125,7 @@ export default async function DashboardPage() {
               {pendingClinics.slice(0, 4).map((c) => (
                 <div key={c.id} className="flex items-center gap-3 px-5 py-3">
                   <div className="h-8 w-8 rounded-lg bg-accent flex items-center justify-center text-[11px] font-bold text-accent-foreground shrink-0">
-                    {c.code.slice(-3)}
+                    {displayClinicCode(c)?.slice(-3)}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="text-sm font-medium truncate">{c.name}</div>
@@ -183,7 +183,7 @@ export default async function DashboardPage() {
                             {relativeTime(o.shopifyCreatedAt)}
                           </div>
                         </td>
-                        <td className="py-2.5 text-xs font-medium">{o.clinic?.code ?? "N/A"}</td>
+                        <td className="py-2.5 text-xs font-medium">{displayClinicCode(o.clinic) ?? "N/A"}</td>
                         <td className="py-2.5 text-right tabular-nums font-medium">
                           {currency(o.total)}
                         </td>
@@ -214,12 +214,12 @@ export default async function DashboardPage() {
                   className="flex items-center gap-3 px-5 py-3 hover:bg-muted/40 transition-colors"
                 >
                   <div className="h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center text-[11px] font-bold text-primary shrink-0">
-                    {c.code.slice(-3)}
+                    {displayClinicCode(c)?.slice(-3)}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="text-sm font-medium truncate">{c.name}</div>
                     <div className="text-xs text-muted-foreground">
-                      {c.code} · {c.ordersMtd} orders MTD
+                      {displayClinicCode(c)} · {c.ordersMtd} orders MTD
                     </div>
                   </div>
                   <div className="text-right">

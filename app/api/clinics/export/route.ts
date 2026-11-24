@@ -13,11 +13,11 @@ export async function GET() {
     const clinics = await getClinicsWithStats();
 
     const header = [
-      "name", "code", "email", "phone", "status", "agreement",
+      "name", "code", "clinicCode", "email", "phone", "status", "agreement",
       "commissionPct", "ordersMtd", "monthSales", "totalCommission", "joined",
     ];
     const rows = clinics.map((c) => [
-      c.name, c.code, c.email, c.phone ?? "", c.status, c.agreement,
+      c.name, c.code, c.clinicCode ?? "", c.email, c.phone ?? "", c.status, c.agreement,
       c.commissionPct, c.ordersMtd, c.monthSales, c.totalCommission,
       c.joined ? new Date(c.joined).toISOString().slice(0, 10) : "",
     ]);

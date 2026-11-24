@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { isClinicCodeTaken } from "@/lib/clinic-code";
 import { getClinicsWithStats } from "@/lib/stats";
 import { requireSession, handleApiError, ApiError } from "@/lib/api-utils";
 import { logAudit, ipFromRequest } from "@/lib/audit";
@@ -33,6 +34,7 @@ export async function GET(req: NextRequest) {
         (c) =>
           c.name.toLowerCase().includes(search) ||
           c.code.toLowerCase().includes(search) ||
+          c.clinicCode?.toLowerCase().includes(search) ||
           c.email.toLowerCase().includes(search),
       );
     }
@@ -49,8 +51,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const input = createClinicSchema.parse(body);
 
-    const existing = await prisma.clinic.findUnique({ where: { code: input.code } });
-    if (existing) {
+    if (await isClinicCodeTaken(input.code)) {
       throw new ApiError(409, "A clinic with this code already exists");
     }
 

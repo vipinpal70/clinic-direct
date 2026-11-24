@@ -11,7 +11,7 @@ import { SectionCard } from "@/components/shared/section-card";
 import { StatusPill } from "@/components/shared/status-pill";
 import { Button } from "@/components/ui/button";
 import { prisma } from "@/lib/prisma";
-import { dateFmt } from "@/lib/utils";
+import { dateFmt, displayClinicCode } from "@/lib/utils";
 import { ApproveButton } from "./approve-button";
 import { AgreementDialog } from "./agreement-dialog";
 
@@ -95,7 +95,7 @@ export default async function ApprovalsPage() {
               return (
                 <div key={c.id} className="flex flex-col md:flex-row md:items-center gap-4 px-5 py-4">
                   <div className="h-10 w-10 rounded-lg bg-accent flex items-center justify-center text-xs font-bold text-accent-foreground shrink-0">
-                    {c.code.slice(-3)}
+                    {displayClinicCode(c)?.slice(-3)}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="font-medium">{c.name}</div>

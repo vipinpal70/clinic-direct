@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { findClinicByCode } from "@/lib/clinic-code";
 import { resolveCommissionPct, computeCommission } from "@/lib/commission";
 import { verifyShopifyHmac, withWebhookCapture } from "@/lib/webhook-capture";
 
@@ -102,7 +103,7 @@ async function processShopifyOrder(topic: string, payload: ShopifyOrderPayload) 
   const codeAttr = payload.note_attributes?.find((a) => a.name === "clinic_code");
   if (!codeAttr) throw new Error("No clinic_code note attribute on order");
 
-  const clinic = await prisma.clinic.findUnique({ where: { code: codeAttr.value } });
+  const clinic = await findClinicByCode(codeAttr.value);
   if (!clinic) throw new Error(`Unknown clinic code: ${codeAttr.value}`);
 
   const total = parseFloat(payload.total_price);

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { displayClinicCode } from "@/lib/utils";
 import { requireSession, handleApiError } from "@/lib/api-utils";
 
 function csvEscape(value: string | number) {
@@ -11,7 +12,7 @@ export async function GET() {
   try {
     await requireSession();
     const orders = await prisma.order.findMany({
-      include: { clinic: { select: { name: true, code: true } } },
+      include: { clinic: { select: { name: true, code: true, clinicCode: true } } },
       orderBy: { shopifyCreatedAt: "desc" },
     });
 
@@ -20,7 +21,7 @@ export async function GET() {
       "commission", "status", "date",
     ];
     const rows = orders.map((o) => [
-      o.number, o.clinic?.code ?? "", o.customerName ?? "", o.items,
+      o.number, displayClinicCode(o.clinic) ?? "", o.customerName ?? "", o.items,
       o.total, o.commission, o.status,
       o.shopifyCreatedAt.toISOString().slice(0, 10),
     ]);

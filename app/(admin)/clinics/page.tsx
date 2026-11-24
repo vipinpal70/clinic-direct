@@ -7,7 +7,7 @@ import { StatCard } from "@/components/shared/stat-card";
 import { StatusPill } from "@/components/shared/status-pill";
 import { Button } from "@/components/ui/button";
 import { getClinicsWithStats } from "@/lib/stats";
-import { currency, dateFmt } from "@/lib/utils";
+import { currency, dateFmt, displayClinicCode } from "@/lib/utils";
 import type { ClinicStatus } from "@/types";
 import { SendAgreementDialog } from "@/components/clinics/send-agreement-dialog";
 import { ClinicFilters } from "./clinic-filters";
@@ -43,6 +43,7 @@ export default async function ClinicsPage({ searchParams }: Props) {
       (c) =>
         c.name.toLowerCase().includes(q) ||
         c.code.toLowerCase().includes(q) ||
+        c.clinicCode?.toLowerCase().includes(q) ||
         c.email.toLowerCase().includes(q),
     );
   }
@@ -78,7 +79,8 @@ export default async function ClinicsPage({ searchParams }: Props) {
               <thead>
                 <tr className="text-left text-xs text-muted-foreground border-b border-border">
                   <th className="font-medium px-5 py-2.5">Clinic</th>
-                  <th className="font-medium py-2.5">Code</th>
+                  <th className="font-medium py-2.5">Clinic code</th>
+                  <th className="font-medium py-2.5">Unique code</th>
                   <th className="font-medium py-2.5">Status</th>
                   <th className="font-medium py-2.5 text-right">Orders MTD</th>
                   <th className="font-medium py-2.5 text-right">Sales MTD</th>
@@ -90,7 +92,7 @@ export default async function ClinicsPage({ searchParams }: Props) {
               <tbody className="divide-y divide-border">
                 {clinics.length === 0 && (
                   <tr>
-                    <td colSpan={8} className="py-12 text-center text-sm text-muted-foreground">
+                    <td colSpan={9} className="py-12 text-center text-sm text-muted-foreground">
                       No clinics match your filters.
                     </td>
                   </tr>
@@ -100,7 +102,7 @@ export default async function ClinicsPage({ searchParams }: Props) {
                     <td className="px-5 py-3">
                       <div className="flex items-center gap-3">
                         <div className="h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center text-[11px] font-bold text-primary shrink-0">
-                          {c.code.slice(-3)}
+                          {displayClinicCode(c)?.slice(-3)}
                         </div>
                         <div>
                           <Link
@@ -115,7 +117,8 @@ export default async function ClinicsPage({ searchParams }: Props) {
                         </div>
                       </div>
                     </td>
-                    <td className="py-3 font-mono text-xs">{c.code}</td>
+                    <td className="py-3 pr-4 font-mono text-xs">{c.clinicCode ?? "—"}</td>
+                    <td className="py-3 pr-4 font-mono text-xs text-muted-foreground">{c.code}</td>
                     <td className="py-3">
                       <StatusPill tone={statusTone[c.status]}>
                         {c.status}
@@ -138,7 +141,7 @@ export default async function ClinicsPage({ searchParams }: Props) {
                             id: c.id,
                             name: c.name,
                             email: c.email,
-                            code: c.code,
+                            code: displayClinicCode(c) ?? c.code,
                             commissionPct: c.commissionPct,
                             agreement: c.agreement,
                             agreementLocked: c.agreementLocked,

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { findClinicByCode } from "@/lib/clinic-code";
 import { requireSession, handleApiError, ApiError } from "@/lib/api-utils";
 import { logAudit, ipFromRequest } from "@/lib/audit";
 
@@ -28,7 +29,7 @@ export async function POST(req: NextRequest) {
     for (const row of rows) {
       if (!row.name || !row.code || !row.email) continue;
 
-      const existing = await prisma.clinic.findUnique({ where: { code: row.code } });
+      const existing = await findClinicByCode(row.code);
       const data = {
         name: row.name,
         email: row.email,
@@ -37,7 +38,7 @@ export async function POST(req: NextRequest) {
       };
 
       if (existing) {
-        await prisma.clinic.update({ where: { code: row.code }, data });
+        await prisma.clinic.update({ where: { id: existing.id }, data });
         updated++;
       } else {
         await prisma.clinic.create({

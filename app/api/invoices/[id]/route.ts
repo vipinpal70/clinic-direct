@@ -22,7 +22,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
     const { id } = await params;
     const invoice = await prisma.invoice.findUnique({
       where: { id },
-      include: { clinic: { select: { name: true, code: true } } },
+      include: { clinic: { select: { name: true, code: true, clinicCode: true } } },
     });
     if (!invoice) throw new ApiError(404, "Invoice not found");
     return NextResponse.json({ data: invoice });

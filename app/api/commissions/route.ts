@@ -25,7 +25,7 @@ export async function GET(req: NextRequest) {
 
     const commissions = await prisma.commission.findMany({
       where,
-      include: { clinic: { select: { name: true, code: true } } },
+      include: { clinic: { select: { name: true, code: true, clinicCode: true } } },
       orderBy: [{ period: "desc" }, { createdAt: "desc" }],
     });
 

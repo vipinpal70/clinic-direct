@@ -69,10 +69,23 @@ export type OrderStatus =
   | "refunded"
   | "cancelled";
 
+/**
+ * What the clinic/client decision was based on:
+ *   "tags" — the payload carried Shopify tags
+ *   "note" — the note carried a clinic code
+ *   "none" — neither was present, so `client` is only a default and must not
+ *            downgrade a row already stored as a clinic
+ */
+export type TagSource = "tags" | "note" | "none";
+
 export interface CustomerRecord {
   tag: ClinicTag;
+  tagSource: TagSource;
   name: string;
+  /** Permanent unique id, CUST-<shopifyId>. */
   code: string;
+  /** Business code from the note; null when the note has none. */
+  clinicCode: string | null;
   email: string;
   phone: string | null;
   status: ClinicStatus;
@@ -165,9 +178,47 @@ export function parseTags(tags?: string | null): string[] {
     .filter(Boolean);
 }
 
-/** A customer is a clinic when its tags contain `clinic`; otherwise a client. */
+/** True when the Shopify tags contain `clinic`. */
 export function isClinic(tags?: string | null): boolean {
   return parseTags(tags).includes("clinic");
+}
+
+/** Permanent unique id for a Shopify customer. Same for clinics and clients, so
+ * it never changes if a customer is reclassified. */
+export function customerCode(shopifyId: string): string {
+  return `CUST-${shopifyId}`;
+}
+
+/** Ids we mint ourselves (CLINIC-<id> is the older form) — never a business code. */
+const RESERVED_CODE = /^(CLINIC|CUST)-\d+$/i;
+
+const PLACEHOLDER_CODES = new Set(["NA", "NONE", "NULL", "NIL", "TBC", "TBA", "UNKNOWN"]);
+
+/**
+ * Normalises the free-text note code to the form orders carry (trimmed,
+ * upper-cased). Returns null for blanks, placeholders ("N/A", "none"), our own
+ * CLINIC-/CUST-<id> ids, and free text that isn't a single code.
+ */
+export function normaliseClinicCode(value?: string | null): string | null {
+  const code = (value ?? "").trim().toUpperCase();
+  if (!/^[A-Z0-9][A-Z0-9_-]{0,63}$/.test(code)) return null;
+  if (PLACEHOLDER_CODES.has(code) || RESERVED_CODE.test(code)) return null;
+  return code;
+}
+
+/**
+ * A customer is a clinic when its tags contain `clinic` OR its note carries a
+ * clinic code. The note matters because customer webhook payloads can omit
+ * `tags` entirely.
+ */
+export function classifyCustomer(
+  customer: ShopifyCustomer,
+  noteCode: string | null,
+): { tag: ClinicTag; tagSource: TagSource } {
+  if (isClinic(customer.tags)) return { tag: "clinic", tagSource: "tags" };
+  if (noteCode) return { tag: "clinic", tagSource: "note" };
+  const hasTags = customer.tags !== undefined && customer.tags !== null;
+  return { tag: "client", tagSource: hasTags ? "tags" : "none" };
 }
 
 function formatAddress(addr?: ShopifyAddress | null): string | null {
@@ -186,7 +237,8 @@ function formatAddress(addr?: ShopifyAddress | null): string | null {
 }
 
 /**
- * Derives a clinic code from an email's local part: everything before the first
+ * The code older versions derived from an email's local part — only used to
+ * recognise rows stored that way: everything before the first
  * `@`, with every run of non-alphanumeric characters (`.`, `+`, etc.) collapsed
  * to `-`, surrounding dashes trimmed, and upper-cased to match our codes.
  * e.g. `vuilive.digital@gmail.com` → `VUILIVE-DIGITAL`. Returns null when the
@@ -202,31 +254,11 @@ export function codeFromEmail(email?: string | null): string | null {
   return code || null;
 }
 
-/**
- * Resolves the unique upsert code for a customer. Clinic codes are derived from
- * the email local part (see `codeFromEmail`), falling back to the note code and
- * then a deterministic synthetic id; everything else gets a synthetic code from
- * the Shopify customer id so nothing is ever skipped and uniqueness holds.
- */
-export function resolveCustomerCode(
-  customer: ShopifyCustomer,
-  parsed: ParsedNote,
-  tag: ClinicTag,
-): string {
-  const shopifyId = String(customer.id);
-  if (tag === "clinic") {
-    const emailCode = codeFromEmail(customer.email);
-    if (emailCode) return emailCode;
-    if (parsed.clinicCode) return parsed.clinicCode.trim().toUpperCase();
-    return `CLINIC-${shopifyId}`;
-  }
-  return `CUST-${shopifyId}`;
-}
-
 /** Reduce a raw Shopify customer to the lean record we store, tagged clinic/client. */
 export function transformCustomer(customer: ShopifyCustomer): CustomerRecord {
   const parsed = parseCustomerNote(customer.note);
-  const tag: ClinicTag = isClinic(customer.tags) ? "clinic" : "client";
+  const clinicCode = normaliseClinicCode(parsed.clinicCode);
+  const { tag, tagSource } = classifyCustomer(customer, clinicCode);
 
   const fullName = [customer.first_name, customer.last_name]
     .map((p) => (p ?? "").trim())
@@ -241,8 +273,10 @@ export function transformCustomer(customer: ShopifyCustomer): CustomerRecord {
 
   return {
     tag,
+    tagSource,
     name,
-    code: resolveCustomerCode(customer, parsed, tag),
+    code: customerCode(String(customer.id)),
+    clinicCode,
     email: customer.email ?? "",
     phone: customer.phone ?? null,
     status,

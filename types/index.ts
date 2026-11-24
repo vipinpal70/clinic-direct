@@ -33,6 +33,7 @@ export interface Clinic {
   id: string;
   name: string;
   code: string;
+  clinicCode?: string | null;
   email: string;
   phone?: string;
   status: ClinicStatus;

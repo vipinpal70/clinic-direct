@@ -63,6 +63,13 @@ export function relativeTime(date: Date | string | null | undefined): string {
   return dateFmt(d);
 }
 
+/** What people know a clinic by: its clinic code, else its unique code. */
+export function displayClinicCode(
+  clinic: { code: string; clinicCode?: string | null } | null | undefined,
+): string | null {
+  return clinic ? clinic.clinicCode || clinic.code : null;
+}
+
 export function initials(name: string): string {
   return name
     .split(" ")

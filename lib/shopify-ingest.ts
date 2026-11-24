@@ -1,7 +1,9 @@
 import { prisma } from "@/lib/prisma";
 import { resolveCommissionPct, computeCommission } from "@/lib/commission";
+import { findClinicByCode, isClinicCodeTaken } from "@/lib/clinic-code";
 import { sendProfileCompletionEmail } from "@/lib/mailer";
 import {
+  codeFromEmail,
   transformCustomer,
   transformOrder,
   type ShopifyCustomer,
@@ -27,10 +29,6 @@ function isUniqueViolation(e: unknown): boolean {
   );
 }
 
-/** Synthetic codes minted when Shopify gives us no real clinic code. */
-const FALLBACK_CODE = /^(CLINIC|CUST)-/i;
-const isFallbackCode = (code: string) => FALLBACK_CODE.test(code);
-
 // ─── Customers ──────────────────────────────────────────────────
 
 export interface CustomerIngestResult {
@@ -42,64 +40,70 @@ export interface CustomerIngestResult {
   errors: { code: string; error: string }[];
 }
 
-// Find the existing clinic row for this Shopify customer: the stable
-// shopifyCustomerId wins, then the (mutable) code. This is what stops a
-// customer whose note code appears / disappears / changes between a webhook
-// and an API pull from spawning a second CLINIC-<id> row.
-function findExistingClinic(record: CustomerRecord) {
-  return prisma.clinic.findFirst({
-    where: {
-      OR: [
-        { shopifyCustomerId: record.shopifyCustomerId },
-        { code: record.code },
-      ],
-    },
+// Find the existing row for this Shopify customer. The stable shopifyCustomerId
+// always wins, so re-deliveries and API pulls never spawn a second row.
+//
+// Clinic codes are free text from the Shopify note, so a matching code alone is
+// NOT proof of identity: it only links a row that has no Shopify customer yet
+// and has the same email. Otherwise anyone typing an existing clinic's code
+// would overwrite that clinic's name and email.
+async function findExistingClinic(record: CustomerRecord) {
+  const linked = await prisma.clinic.findFirst({
+    where: { shopifyCustomerId: record.shopifyCustomerId },
   });
+  if (linked) return linked;
+
+  // Unlinked rows: same customer id in the code, or a hand-added / older row
+  // holding this clinic's business code (or the email-derived one).
+  const codes = [record.code];
+  if (record.clinicCode) codes.push(record.clinicCode);
+  const emailCode = record.tag === "clinic" ? codeFromEmail(record.email) : null;
+  if (emailCode) codes.push(emailCode);
+
+  const email = record.email.trim().toLowerCase();
+  const candidates = await prisma.clinic.findMany({ where: { code: { in: codes } } });
+  return (
+    candidates.find(
+      (c) =>
+        !c.shopifyCustomerId?.trim() &&
+        (c.code === record.code || (email !== "" && c.email.trim().toLowerCase() === email)),
+    ) ?? null
+  );
 }
 
 type ClinicRow = NonNullable<Awaited<ReturnType<typeof findExistingClinic>>>;
 
-// Mutable Shopify-sourced fields only — admin-managed fields (commissionPct,
-// portal login, agreement state) are never touched here.
-function customerUpdateData(record: CustomerRecord, existing: ClinicRow) {
-  // Only ever upgrade a synthetic fallback code to a real one; never replace a
-  // real code (admin- or note-assigned) with a fallback or a different real code.
-  const code =
-    !isFallbackCode(record.code) && isFallbackCode(existing.code)
-      ? record.code
-      : existing.code;
-
-  return {
-    name: record.name,
-    code,
-    tag: record.tag,
-    // `@unique` on shopifyCustomerId blocks a bad rebind; keep whatever is set.
-    shopifyCustomerId: existing.shopifyCustomerId ?? record.shopifyCustomerId,
-    businessName: record.businessName,
-    vatNumber: record.vatNumber,
-    email: record.email,
-    phone: record.phone,
-    status: record.status,
-    agreement: record.agreement,
-    address: record.address,
-  };
+/** `codeConflict` is set when the note's clinic code already belongs to another clinic. */
+interface UpsertResult {
+  row: ClinicRow;
+  codeConflict: boolean;
 }
 
-async function updateClinic(
-  id: string,
-  data: ReturnType<typeof customerUpdateData>,
-) {
-  try {
-    return await prisma.clinic.update({ where: { id }, data });
-  } catch (error) {
-    if (!isUniqueViolation(error)) throw error;
-    // The real code we tried to promote is still held by a not-yet-merged
-    // duplicate row — refresh every other field now, leave the code for
-    // `npm run db:dedupe` to reconcile.
-    const { code, ...rest } = data;
-    void code;
-    return prisma.clinic.update({ where: { id }, data: rest });
-  }
+// Mutable Shopify-sourced fields. Never touched here: `code` (permanent),
+// `agreement` (owned by the send / sign / approve flow — Shopify only seeds it on
+// create, so a webhook can't undo a signature), commissionPct and portal login.
+async function updateClinic(existing: ClinicRow, record: CustomerRecord): Promise<UpsertResult> {
+  const codeConflict =
+    record.clinicCode !== null && (await isClinicCodeTaken(record.clinicCode, existing.id));
+
+  const row = await prisma.clinic.update({
+    where: { id: existing.id },
+    data: {
+      name: record.name,
+      // A note without a code, or with someone else's, keeps what is stored.
+      clinicCode: (codeConflict ? null : record.clinicCode) ?? existing.clinicCode,
+      // No tags and no clinic code tells us nothing — keep the classification.
+      tag: record.tagSource === "none" ? existing.tag : record.tag,
+      shopifyCustomerId: existing.shopifyCustomerId?.trim() || record.shopifyCustomerId,
+      businessName: record.businessName,
+      vatNumber: record.vatNumber,
+      email: record.email,
+      phone: record.phone,
+      status: record.status,
+      address: record.address,
+    },
+  });
+  return { row, codeConflict };
 }
 
 // Send the profile-completion email on first ingest and record the send. An SMTP
@@ -127,17 +131,22 @@ async function sendFirstProfileEmail(clinic: {
   }
 }
 
-async function upsertCustomer(record: CustomerRecord) {
+async function upsertCustomer(record: CustomerRecord): Promise<UpsertResult> {
   const existing = await findExistingClinic(record);
-  if (existing) {
-    return updateClinic(existing.id, customerUpdateData(record, existing));
-  }
+  if (existing) return updateClinic(existing, record);
 
+  // Never drop a customer over a clashing clinic code: store them without it
+  // and report the clash.
+  const codeConflict =
+    record.clinicCode !== null && (await isClinicCodeTaken(record.clinicCode));
+
+  let row: ClinicRow;
   try {
-    const created = await prisma.clinic.create({
+    row = await prisma.clinic.create({
       data: {
         name: record.name,
         code: record.code,
+        clinicCode: codeConflict ? null : record.clinicCode,
         tag: record.tag,
         shopifyCustomerId: record.shopifyCustomerId,
         businessName: record.businessName,
@@ -153,17 +162,18 @@ async function upsertCustomer(record: CustomerRecord) {
         loginHash: record.loginHash,
       },
     });
-    // New clinic → trigger the "complete your profile" email once.
-    await sendFirstProfileEmail(created);
-    return created;
   } catch (error) {
     if (!isUniqueViolation(error)) throw error;
-    // A concurrent webhook / pull created the row between our find and create —
-    // re-resolve and update it instead of duplicating.
+    // A concurrent webhook / pull created this customer between our find and
+    // create — re-resolve and update it instead of duplicating.
     const raced = await findExistingClinic(record);
     if (!raced) throw error;
-    return updateClinic(raced.id, customerUpdateData(record, raced));
+    return updateClinic(raced, record);
   }
+
+  // New clinic → trigger the "complete your profile" email once.
+  await sendFirstProfileEmail(row);
+  return { row, codeConflict };
 }
 
 export async function ingestCustomers(
@@ -176,15 +186,26 @@ export async function ingestCustomers(
 
   for (const customer of raw) {
     const record = transformCustomer(customer);
-    (record.tag === "clinic" ? clinics : clients).push(record);
+    const wantedCode = record.clinicCode;
     try {
-      await upsertCustomer(record);
+      const { row, codeConflict } = await upsertCustomer(record);
+      // Report what is actually stored, which can differ from the payload.
+      record.code = row.code;
+      record.clinicCode = row.clinicCode;
+      record.tag = row.tag;
+      if (codeConflict) {
+        errors.push({
+          code: row.code,
+          error: `Clinic code ${wantedCode} already belongs to another clinic, so it was not saved on ${row.code}`,
+        });
+      }
     } catch (error) {
       errors.push({
         code: record.code,
         error: error instanceof Error ? error.message : "Unknown error",
       });
     }
+    (record.tag === "clinic" ? clinics : clients).push(record);
   }
 
   try {
@@ -231,7 +252,7 @@ async function lastCodeFromDb(email: string | null): Promise<string | null> {
     orderBy: { shopifyCreatedAt: "desc" },
     include: { clinic: true },
   });
-  return prior?.clinic?.code ?? null;
+  return prior?.clinic ? (prior.clinic.clinicCode ?? prior.clinic.code) : null;
 }
 
 async function upsertOrder(record: OrderRecord, code: string | null) {
@@ -240,7 +261,7 @@ async function upsertOrder(record: OrderRecord, code: string | null) {
   let commission = 0;
 
   if (code) {
-    const clinic = await prisma.clinic.findUnique({ where: { code } });
+    const clinic = await findClinicByCode(code);
     if (clinic) {
       clinicId = clinic.id;
       commissionPct = await resolveCommissionPct(clinic.id);

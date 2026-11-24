@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { findClinicByCode } from "@/lib/clinic-code";
 import { requireSession, handleApiError, ApiError } from "@/lib/api-utils";
 
 // GET /api/getProfileUrl?code=APX-008
 // Returns the relative URL of a clinic's detail page, e.g. "/clinic/details/APX-008".
+// `code` may be the clinic code or the unique code; the URL always uses the latter.
 export async function GET(req: NextRequest) {
   try {
     await requireSession();
@@ -14,10 +15,7 @@ export async function GET(req: NextRequest) {
       throw new ApiError(400, "Missing required query parameter: code");
     }
 
-    const clinic = await prisma.clinic.findUnique({
-      where: { code },
-      select: { code: true },
-    });
+    const clinic = await findClinicByCode(code);
     if (!clinic) {
       throw new ApiError(404, `No clinic found for code: ${code}`);
     }

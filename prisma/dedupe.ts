@@ -68,7 +68,7 @@ function pickSurvivor(rows: Clinic[]): Clinic {
 
 // Fields copied loser → survivor when the survivor's is empty.
 const FILL_FIELDS = [
-  "shopifyCustomerId", "phone", "address", "website", "businessName", "vatNumber",
+  "shopifyCustomerId", "clinicCode", "phone", "address", "website", "businessName", "vatNumber",
   "loginEmail", "loginHash", "bankDetails", "taxExempt", "detailsSubmittedAt",
   "agreementId", "agreementSnapshot", "agreementCommissionPct", "agreementExpiry",
   "agreementSentAt", "agreementAcceptedAt", "agreementApprovedAt", "agreementSignedName",

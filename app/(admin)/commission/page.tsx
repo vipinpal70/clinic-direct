@@ -3,7 +3,7 @@ import { SectionCard } from "@/components/shared/section-card";
 import { StatCard } from "@/components/shared/stat-card";
 import { StatusPill } from "@/components/shared/status-pill";
 import { prisma } from "@/lib/prisma";
-import { currency } from "@/lib/utils";
+import { currency, displayClinicCode } from "@/lib/utils";
 import { RuleDialog } from "./rule-dialog";
 import { RecalculateButton } from "./recalculate-button";
 
@@ -30,7 +30,7 @@ export default async function CommissionPage() {
     }),
     prisma.commission.findMany({
       where: { period: currentPeriod },
-      include: { clinic: { select: { name: true, code: true } } },
+      include: { clinic: { select: { name: true, code: true, clinicCode: true } } },
       orderBy: { commission: "desc" },
     }),
     prisma.commission.groupBy({
@@ -156,7 +156,7 @@ export default async function CommissionPage() {
                   <tr key={c.id} className="hover:bg-muted/40 transition-colors">
                     <td className="px-5 py-3">
                       <div className="font-medium">{c.clinic?.name ?? "—"}</div>
-                      <div className="text-xs text-muted-foreground">{c.clinic?.code ?? "—"}</div>
+                      <div className="text-xs text-muted-foreground">{displayClinicCode(c.clinic) ?? "—"}</div>
                     </td>
                     <td className="py-3 text-right tabular-nums">{currency(c.gross)}</td>
                     <td className="py-3 text-right tabular-nums font-semibold text-primary">

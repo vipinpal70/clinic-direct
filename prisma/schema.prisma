@@ -92,7 +92,8 @@ type TaxExempt {
 model Clinic {
   id              String          @id @default(auto()) @map("_id") @db.ObjectId
   name            String
-  code            String          @unique
+  code            String          @unique // permanent unique id: CUST-<shopifyId> for Shopify customers; used in portal links
+  clinicCode      String?         // business code from the Shopify note; orders match on this (see lib/clinic-code.ts)
   tag             ClinicTag       @default(clinic) // clinic vs individual client/patient
   shopifyCustomerId String?       // stable Shopify identity — the primary match key on ingest (see lib/shopify-ingest.ts)
   businessName    String?         // parsed from the Shopify customer note
@@ -137,6 +138,8 @@ model Clinic {
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
 
+  @@index([clinicCode])
+  @@index([shopifyCustomerId])
   @@map("clinics")
 }
 
