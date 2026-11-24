@@ -11,6 +11,7 @@ import { SectionCard } from "@/components/shared/section-card";
 import { StatusPill } from "@/components/shared/status-pill";
 import { Button } from "@/components/ui/button";
 import { prisma } from "@/lib/prisma";
+import { detailsPath } from "@/lib/portal-token";
 import { dateFmt, displayClinicCode } from "@/lib/utils";
 import { ApproveButton } from "./approve-button";
 import { AgreementDialog } from "./agreement-dialog";
@@ -143,6 +144,7 @@ export default async function ApprovalsPage() {
                       clinicId={c.id}
                       clinicName={c.name}
                       code={c.code}
+                      detailsPath={detailsPath(c)}
                       agreement={c.agreement}
                       commissionPct={c.commissionPct}
                       agreementCommissionPct={c.agreementCommissionPct ?? null}

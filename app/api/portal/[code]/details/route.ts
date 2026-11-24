@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { handleApiError, ApiError } from "@/lib/api-utils";
 import { logAudit, ipFromRequest } from "@/lib/audit";
+import { isLinkSpent, verifyDetailsToken } from "@/lib/portal-token";
 
 const digits = (s: string) => s.replace(/\D/g, "");
 
@@ -39,14 +40,25 @@ interface Params {
   params: Promise<{ code: string }>;
 }
 
-// Public — clinic submits its bank + tax details (Step 1). No session required.
+// Public — clinic submits its bank + tax details (Step 1). No session, but the
+// signed link token is required and each link allows one submission
+// (see lib/portal-token.ts).
 export async function POST(req: NextRequest, { params }: Params) {
   try {
     const { code } = await params;
     const clinic = await prisma.clinic.findUnique({
       where: { code: code.toUpperCase() },
     });
-    if (!clinic) throw new ApiError(404, "Clinic not found");
+    const issuedAt = clinic && verifyDetailsToken(clinic, req.headers.get("x-portal-token"));
+    if (!clinic || !issuedAt) {
+      throw new ApiError(404, "This link is invalid or has expired.");
+    }
+    const alreadySubmitted = () =>
+      new ApiError(
+        409,
+        "Details have already been submitted with this link. Please contact Clinic Direct to change them.",
+      );
+    if (isLinkSpent(issuedAt, clinic.detailsSubmittedAt)) throw alreadySubmitted();
 
     const input = detailsSchema.parse(await req.json());
 
@@ -55,8 +67,17 @@ export async function POST(req: NextRequest, { params }: Params) {
       throw new ApiError(400, "Provide the exemption type code for an exempt clinic");
     }
 
-    await prisma.clinic.update({
-      where: { id: clinic.id },
+    // Re-check "not spent" in the write itself so two submissions racing on the
+    // same link can't both land.
+    const { count } = await prisma.clinic.updateMany({
+      where: {
+        id: clinic.id,
+        OR: [
+          { detailsSubmittedAt: null },
+          { detailsSubmittedAt: { isSet: false } },
+          { detailsSubmittedAt: { lt: issuedAt } },
+        ],
+      },
       data: {
         bankDetails: {
           accountHolderName: input.bankDetails.accountHolderName,
@@ -74,9 +95,11 @@ export async function POST(req: NextRequest, { params }: Params) {
       },
     });
 
+    if (count === 0) throw alreadySubmitted();
+
     await logAudit({
       userEmail: clinic.email,
-      action: "clinic.details.submitted",
+      action: clinic.detailsSubmittedAt ? "clinic.details.changed" : "clinic.details.submitted",
       target: clinic.name,
       ipAddress: ipFromRequest(req),
     });

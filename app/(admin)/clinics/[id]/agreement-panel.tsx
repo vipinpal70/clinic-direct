@@ -10,6 +10,8 @@ import { notifyEmailSent, notifyEmailFailed } from "@/lib/toast";
 interface Props {
   clinicId: string;
   code: string;
+  /** Signed, expiring intake link (see lib/portal-token.ts). */
+  detailsPath: string;
   agreement: string; // not_sent | sent | viewed | accepted
   commissionPct: number;
   agreementCommissionPct: number | null;
@@ -56,6 +58,7 @@ function CopyLink({ label, path }: { label: string; path: string }) {
 export function AgreementPanel({
   clinicId,
   code,
+  detailsPath,
   agreement,
   commissionPct,
   agreementCommissionPct,
@@ -155,7 +158,12 @@ export function AgreementPanel({
           can&apos;t provide. The first email is sent automatically when the
           clinic is imported.
         </p>
-        <CopyLink label="Public intake URL" path={`/clinic/details/${code}`} />
+        <CopyLink label="Private intake link (expires in 30 days)" path={detailsPath} />
+        <p className="text-xs text-muted-foreground">
+          {detailsSubmitted
+            ? "This is a new link that lets the clinic replace the details already submitted. Only share it with the clinic."
+            : "Works for one submission. Only share it with the clinic."}
+        </p>
 
         <div className="flex items-center justify-between gap-3 pt-1">
           <Button

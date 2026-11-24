@@ -1,6 +1,7 @@
 import nodemailer from "nodemailer";
 import { currencyExact, dateFmt } from "@/lib/utils";
 import { generateInvoicePdf } from "@/lib/invoice-pdf";
+import { detailsPath, PORTAL_LINK_DAYS } from "@/lib/portal-token";
 
 export const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST,
@@ -56,16 +57,16 @@ interface EmailableClinic {
  * via the public intake page. Sent automatically on first ingest and re-sent
  * manually from the admin clinic page.
  */
-export async function sendProfileCompletionEmail(clinic: EmailableClinic) {
-  const url = appUrl(`/clinic/details/${clinic.code}`);
+export async function sendProfileCompletionEmail(clinic: EmailableClinic & { id: string }) {
+  const url = appUrl(detailsPath(clinic));
   return transporter.sendMail({
     from: process.env.MAIL_FROM,
     to: clinic.email,
     subject: "Complete your Clinic Direct profile",
-    text: `Hi ${clinic.name},\n\nPlease complete your Clinic Direct profile by adding your bank and tax details:\n${url}\n`,
+    text: `Hi ${clinic.name},\n\nPlease complete your Clinic Direct profile by adding your bank and tax details:\n${url}\n\nThis link is personal to your clinic and expires in ${PORTAL_LINK_DAYS} days. Please don't forward it.\n`,
     html: brandedHtml({
       heading: `Welcome to Clinic Direct, ${clinic.name}`,
-      body: "To finish setting up your account, please complete your profile by entering your bank and tax details. It only takes a couple of minutes.",
+      body: `To finish setting up your account, please complete your profile by entering your bank and tax details. It only takes a couple of minutes. This link is personal to your clinic and expires in ${PORTAL_LINK_DAYS} days, so please don't forward it.`,
       ctaLabel: "Complete your profile",
       ctaUrl: url,
     }),

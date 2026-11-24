@@ -19,6 +19,7 @@ import { StatusPill } from "@/components/shared/status-pill";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { prisma } from "@/lib/prisma";
+import { detailsPath } from "@/lib/portal-token";
 import { getClinicWithStats } from "@/lib/stats";
 import { currency, dateFmt, relativeTime } from "@/lib/utils";
 import type { ClinicStatus } from "@/types";
@@ -235,6 +236,7 @@ export default async function ClinicProfilePage({ params }: Props) {
               <AgreementPanel
                 clinicId={clinic.id}
                 code={clinic.code}
+                detailsPath={detailsPath(clinic)}
                 agreement={clinic.agreement}
                 commissionPct={clinic.commissionPct}
                 agreementCommissionPct={clinic.agreementCommissionPct ?? null}

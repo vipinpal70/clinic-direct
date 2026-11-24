@@ -1,24 +1,11 @@
 "use client";
 
 import { use, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 
 interface ClinicInfo {
   name: string;
-  code: string;
-  email: string;
   detailsSubmitted: boolean;
-  bankDetails: {
-    accountHolderName: string;
-    bankName: string;
-    accountNumber: string;
-    sortCode: string;
-  };
-  taxExempt: {
-    exemptStatus: boolean;
-    exemptionTypeCode: string;
-    exemptionCertificateUrl: string;
-    vatId: string;
-  };
 }
 
 export default function ClinicDetailsPage({
@@ -27,6 +14,7 @@ export default function ClinicDetailsPage({
   params: Promise<{ code: string }>;
 }) {
   const { code } = use(params);
+  const token = useSearchParams().get("t");
   const [info, setInfo] = useState<ClinicInfo | null>(null);
   const [state, setState] = useState<"loading" | "ready" | "invalid" | "done">(
     "loading",
@@ -48,16 +36,15 @@ export default function ClinicDetailsPage({
   });
 
   useEffect(() => {
-    fetch(`/api/portal/${code}`)
+    if (!token) return setState("invalid");
+    fetch(`/api/portal/${code}`, { headers: { "x-portal-token": token } })
       .then((r) => (r.ok ? r.json() : Promise.reject()))
       .then(({ data }: { data: ClinicInfo }) => {
         setInfo(data);
-        setBank(data.bankDetails);
-        setTax(data.taxExempt);
         setState(data.detailsSubmitted ? "done" : "ready");
       })
       .catch(() => setState("invalid"));
-  }, [code]);
+  }, [code, token]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -65,7 +52,7 @@ export default function ClinicDetailsPage({
     setError(null);
     const res = await fetch(`/api/portal/${code}/details`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "x-portal-token": token ?? "" },
       body: JSON.stringify({ bankDetails: bank, taxExempt: tax }),
     });
     setSaving(false);
@@ -91,9 +78,10 @@ export default function ClinicDetailsPage({
   if (state === "invalid")
     return (
       <Shell>
-        <h1 className="text-xl font-semibold">Link not found</h1>
+        <h1 className="text-xl font-semibold">Link not valid</h1>
         <p className="mt-2 text-sm text-[#5F5E5A]">
-          This clinic details link is invalid. Please contact Clinic Direct.
+          This link is invalid or has expired. Please contact Clinic Direct for a
+          new one.
         </p>
       </Shell>
     );

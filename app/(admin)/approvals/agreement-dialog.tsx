@@ -17,6 +17,7 @@ interface Props {
   clinicId: string;
   clinicName: string;
   code: string;
+  detailsPath: string;
   agreement: string;
   commissionPct: number;
   agreementCommissionPct: number | null;
@@ -51,6 +52,7 @@ export function AgreementDialog(props: Props) {
           <AgreementPanel
             clinicId={props.clinicId}
             code={props.code}
+            detailsPath={props.detailsPath}
             agreement={props.agreement}
             commissionPct={props.commissionPct}
             agreementCommissionPct={props.agreementCommissionPct}
