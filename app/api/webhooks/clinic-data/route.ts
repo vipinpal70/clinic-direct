@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { rejectUnauthenticated } from "@/lib/webhook-auth";
 import { withWebhookCapture } from "@/lib/webhook-capture";
 import { ingestCustomers } from "@/lib/shopify-ingest";
 import type { ShopifyCustomer } from "@/lib/shopify-transform";
@@ -13,13 +14,6 @@ import type { ShopifyCustomer } from "@/lib/shopify-transform";
 //
 // The upsert logic is shared with the admin API pull — see lib/shopify-ingest.ts.
 
-// Optional shared-secret guard, mirroring the shopify webhook's secret pattern.
-function guard(req: NextRequest): boolean {
-  const secret = process.env.CLINIC_WEBHOOK_SECRET;
-  if (!secret) return true;
-  return req.headers.get("x-webhook-secret") === secret;
-}
-
 function extractCustomers(payload: unknown): ShopifyCustomer[] {
   if (Array.isArray(payload)) return payload as ShopifyCustomer[];
   if (payload && typeof payload === "object") {
@@ -33,10 +27,8 @@ function extractCustomers(payload: unknown): ShopifyCustomer[] {
 // Every delivery (accepted or rejected) is captured raw in `webhook_events`
 // by withWebhookCapture — see lib/webhook-capture.ts.
 export const POST = withWebhookCapture("clinic-data", async (req: NextRequest, rawBody: string) => {
-
-  if (!guard(req)) {
-    return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
-  }
+  const rejection = rejectUnauthenticated(req, rawBody, { allowSharedSecret: true });
+  if (rejection) return rejection;
 
   let payload: unknown;
   try {

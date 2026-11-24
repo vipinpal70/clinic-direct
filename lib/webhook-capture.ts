@@ -1,7 +1,7 @@
-import crypto from "crypto";
 import { NextResponse, type NextRequest } from "next/server";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { checkShopifySignature } from "@/lib/webhook-auth";
 
 // Raw capture for inbound webhooks. Wrap a route's POST handler with
 // `withWebhookCapture(endpoint, handler)` and every request is stored in
@@ -37,21 +37,6 @@ const KEPT_HEADERS = new Set([
   "x-forwarded-for",
   "x-real-ip",
 ]);
-
-export function verifyShopifyHmac(
-  rawBody: string,
-  signature: string | null,
-  secret: string,
-): boolean {
-  if (!signature) return false;
-  const digest = crypto
-    .createHmac("sha256", secret)
-    .update(rawBody, "utf8")
-    .digest("base64");
-  const a = Buffer.from(digest);
-  const b = Buffer.from(signature);
-  return a.length === b.length && crypto.timingSafeEqual(a, b);
-}
 
 function pickHeaders(headers: Headers): Record<string, string> {
   const out: Record<string, string> = {};
@@ -126,8 +111,6 @@ async function recordReceived(
 
   const tooLarge = rawBody.length > MAX_PAYLOAD_CHARS;
   const storeParsed = parsed && !tooLarge;
-  const secret = process.env.SHOPIFY_WEBHOOK_SECRET;
-  const signature = req.headers.get("x-shopify-hmac-sha256");
 
   const base = {
     endpoint,
@@ -142,8 +125,7 @@ async function recordReceived(
     headers: pickHeaders(req.headers),
     bodyBytes: Buffer.byteLength(rawBody, "utf8"),
     ...(parsed ? describeBody(payload) : {}),
-    signatureValid:
-      signature && secret ? verifyShopifyHmac(rawBody, signature, secret) : undefined,
+    signatureValid: checkShopifySignature(req, rawBody) ?? undefined,
     status: "received" as WebhookEventStatus,
   };
 

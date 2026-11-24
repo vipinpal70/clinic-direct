@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { findClinicByCode } from "@/lib/clinic-code";
 import { resolveCommissionPct, computeCommission } from "@/lib/commission";
-import { verifyShopifyHmac, withWebhookCapture } from "@/lib/webhook-capture";
+import { rejectUnauthenticated } from "@/lib/webhook-auth";
+import { withWebhookCapture } from "@/lib/webhook-capture";
 
 interface ShopifyOrderPayload {
   id: number;
@@ -18,15 +19,10 @@ interface ShopifyOrderPayload {
 // Every delivery (accepted or rejected) is captured raw in `webhook_events`
 // by withWebhookCapture — see lib/webhook-capture.ts.
 export const POST = withWebhookCapture("shopify", async (req: NextRequest, rawBody: string) => {
-  const topic = req.headers.get("x-shopify-topic") ?? "unknown";
-  const secret = process.env.SHOPIFY_WEBHOOK_SECRET;
+  const rejection = rejectUnauthenticated(req, rawBody);
+  if (rejection) return rejection;
 
-  if (secret) {
-    const signature = req.headers.get("x-shopify-hmac-sha256");
-    if (!verifyShopifyHmac(rawBody, signature, secret)) {
-      return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
-    }
-  }
+  const topic = req.headers.get("x-shopify-topic") ?? "unknown";
 
   let payload: ShopifyOrderPayload;
   try {
