@@ -28,12 +28,7 @@ export default function ClinicDetailsPage({
     accountNumber: "",
     sortCode: "",
   });
-  const [tax, setTax] = useState({
-    exemptStatus: false,
-    exemptionTypeCode: "",
-    exemptionCertificateUrl: "",
-    vatId: "",
-  });
+  const [vatId, setVatId] = useState("");
 
   useEffect(() => {
     if (!token) return setState("invalid");
@@ -53,7 +48,7 @@ export default function ClinicDetailsPage({
     const res = await fetch(`/api/portal/${code}/details`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-portal-token": token ?? "" },
-      body: JSON.stringify({ bankDetails: bank, taxExempt: tax }),
+      body: JSON.stringify({ bankDetails: bank, taxExempt: { vatId } }),
     });
     setSaving(false);
     if (res.ok) {
@@ -153,41 +148,10 @@ export default function ClinicDetailsPage({
           </legend>
           <TextField
             label="VAT number (if registered)"
-            value={tax.vatId}
-            onChange={(v) => setTax({ ...tax, vatId: v })}
+            value={vatId}
+            onChange={setVatId}
             placeholder="GB123456789"
           />
-          <label className="flex items-start gap-2.5 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={tax.exemptStatus}
-              onChange={(e) =>
-                setTax({ ...tax, exemptStatus: e.target.checked })
-              }
-              className="mt-0.5 h-4 w-4 accent-[#007A72]"
-            />
-            <span className="text-sm text-[#5F5E5A]">
-              This clinic is VAT / tax exempt
-            </span>
-          </label>
-          {tax.exemptStatus && (
-            <div className="space-y-4 rounded-lg bg-[#F8F7F3] p-4">
-              <TextField
-                label="Exemption type code"
-                value={tax.exemptionTypeCode}
-                onChange={(v) => setTax({ ...tax, exemptionTypeCode: v })}
-                required
-              />
-              <TextField
-                label="Exemption certificate URL (optional)"
-                value={tax.exemptionCertificateUrl}
-                onChange={(v) =>
-                  setTax({ ...tax, exemptionCertificateUrl: v })
-                }
-                placeholder="https://…"
-              />
-            </div>
-          )}
         </fieldset>
 
         {error && <p className="text-sm text-[#A32D2D]">{error}</p>}

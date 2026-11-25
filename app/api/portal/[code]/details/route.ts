@@ -23,15 +23,9 @@ const detailsSchema = z.object({
       .refine((v) => /^\d{6}$/.test(v), "Sort code must be 6 digits (e.g. 40-02-50)")
       .transform((v) => `${v.slice(0, 2)}-${v.slice(2, 4)}-${v.slice(4)}`),
   }),
+  // Only the VAT number is collected; exemption fields are no longer asked for
+  // (and are ignored if an already-open older page still sends them).
   taxExempt: z.object({
-    exemptStatus: z.boolean(),
-    exemptionTypeCode: z.string().trim().optional().default(""),
-    exemptionCertificateUrl: z
-      .string()
-      .trim()
-      .url("Enter a valid URL")
-      .optional()
-      .or(z.literal("")),
     vatId: z.string().trim().optional().default(""),
   }),
 });
@@ -62,11 +56,6 @@ export async function POST(req: NextRequest, { params }: Params) {
 
     const input = detailsSchema.parse(await req.json());
 
-    // If exempt, require a type code; certificate URL stays optional.
-    if (input.taxExempt.exemptStatus && !input.taxExempt.exemptionTypeCode) {
-      throw new ApiError(400, "Provide the exemption type code for an exempt clinic");
-    }
-
     // Re-check "not spent" in the write itself so two submissions racing on the
     // same link can't both land.
     const { count } = await prisma.clinic.updateMany({
@@ -85,12 +74,7 @@ export async function POST(req: NextRequest, { params }: Params) {
           accountNumber: input.bankDetails.accountNumber,
           sortCode: input.bankDetails.sortCode,
         },
-        taxExempt: {
-          exemptStatus: input.taxExempt.exemptStatus,
-          exemptionTypeCode: input.taxExempt.exemptionTypeCode ?? "",
-          exemptionCertificateUrl: input.taxExempt.exemptionCertificateUrl || "",
-          vatId: input.taxExempt.vatId ?? "",
-        },
+        taxExempt: { vatId: input.taxExempt.vatId },
         detailsSubmittedAt: new Date(),
       },
     });

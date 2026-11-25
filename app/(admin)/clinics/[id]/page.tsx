@@ -270,17 +270,6 @@ export default async function ClinicProfilePage({ params }: Props) {
                   <Field label="Account number" value={clinic.bankDetails?.accountNumber || "—"} />
                   <Field label="Sort code" value={clinic.bankDetails?.sortCode || "—"} />
                   <Field label="VAT number" value={clinic.taxExempt?.vatId || "—"} />
-                  <Field
-                    label="Tax exempt"
-                    value={clinic.taxExempt?.exemptStatus ? `Yes (${clinic.taxExempt.exemptionTypeCode || "no code"})` : "No"}
-                  />
-                  {clinic.taxExempt?.exemptionCertificateUrl && (
-                    <Field
-                      label="Exemption certificate"
-                      value={clinic.taxExempt.exemptionCertificateUrl}
-                      link
-                    />
-                  )}
                 </div>
               ) : (
                 <EmptyState message="No bank or tax details submitted yet." />
