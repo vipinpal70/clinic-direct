@@ -11,7 +11,7 @@
 
 export const CLINIC_STATUSES = ["new", "in_progress", "active", "suspended", "inactive"] as const;
 
-/** Statuses of clinics still going through onboarding (shown on Approvals). */
+/** Statuses of clinics still going through onboarding. */
 export const ONBOARDING_STATUSES = ["new", "in_progress", "pending"] as const;
 
 export function isOnboarding(status: string): boolean {
@@ -40,6 +40,7 @@ export interface ApprovalState {
   agreement: string;
   agreementAcceptedAt: Date | string | null;
   agreementLocked: boolean;
+  detailsSubmittedAt: Date | string | null;
 }
 
 /**
@@ -55,7 +56,52 @@ export function clinicHasSigned(c: ApprovalState): boolean {
 export function approvalBlocker(c: ApprovalState): string | null {
   if (c.agreementLocked) return null; // approved before — reactivating
   if (!clinicHasSigned(c)) {
-    return "The clinic must sign the agreement before it can be approved";
+    return "Waiting for the clinic to sign the agreement";
   }
+  if (!c.detailsSubmittedAt) return "Waiting for the clinic to submit its details";
   return null;
+}
+
+/**
+ * Where a clinic is in the approval pipeline. Based on what has actually
+ * happened, not on `status`: older imports copied status from Shopify.
+ *   new       registered, no agreement sent
+ *   sent      agreement emailed; clinic still has to sign or submit its details
+ *   ready     clinic signed and submitted its details; waiting for an admin
+ *   approved  admin approved
+ */
+export type ApprovalStage = "new" | "sent" | "ready" | "approved";
+
+export const APPROVAL_STAGES: ApprovalStage[] = ["new", "sent", "ready", "approved"];
+
+export const APPROVAL_STAGE_LABEL: Record<ApprovalStage, string> = {
+  new: "New",
+  sent: "Agreement sent",
+  ready: "Ready for approval",
+  approved: "Approved",
+};
+
+export const APPROVAL_STAGE_TONE: Record<ApprovalStage, "success" | "warning" | "info" | "muted"> = {
+  new: "muted",
+  sent: "warning",
+  ready: "info",
+  approved: "success",
+};
+
+export function agreementWasSent(c: { agreement: string; agreementSentAt: Date | string | null }): boolean {
+  return Boolean(c.agreementSentAt) || c.agreement === "sent" || c.agreement === "viewed";
+}
+
+export function approvalStage(
+  c: ApprovalState & { agreementSentAt: Date | string | null },
+): ApprovalStage {
+  if (c.agreementLocked) return "approved";
+  if (approvalBlocker(c) === null) return "ready";
+  return agreementWasSent(c) || clinicHasSigned(c) ? "sent" : "new";
+}
+
+/** Clinics that belong on the Approvals page (not patients, not switched off). */
+export function inApprovalPipeline(c: { tag: string | null; status: string; agreementLocked: boolean }): boolean {
+  if (c.tag === "client") return false;
+  return c.agreementLocked || c.status !== "inactive";
 }

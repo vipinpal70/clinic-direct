@@ -58,8 +58,10 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     // Becoming active needs the clinic's own signature plus this admin action.
     // The first time is the approval: lock the agreement, apply the offered
     // rate and stamp activatedAt. A previously approved clinic coming back from
-    // suspended / inactive keeps its original activatedAt.
-    const activating = input.status === "active" && existing.status !== "active";
+    // suspended / inactive keeps its original activatedAt. Older imports marked
+    // some clinics active without approval, so those can still be approved.
+    const activating =
+      input.status === "active" && (existing.status !== "active" || !existing.agreementLocked);
     if (activating) {
       if (input.agreement !== undefined) {
         throw new ApiError(400, "Approve the clinic separately from editing its agreement");
@@ -73,14 +75,14 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     const clinic = await prisma.clinic.update({
       where: {
         id,
-        // Guard against the agreement being re-sent (clearing the signature)
-        // between our read and this write.
-        ...(isApproval ? { agreementLocked: false, agreementAcceptedAt: { not: null } } : {}),
+        // Only approve the signature we just checked: re-sending the agreement
+        // in between clears it, and this then matches nothing.
+        ...(isApproval ? { agreementAcceptedAt: existing.agreementAcceptedAt } : {}),
       },
       data: {
         ...input,
         website: input.website || undefined,
-        ...(activating && !existing.activatedAt ? { activatedAt: now } : {}),
+        ...(isApproval || (activating && !existing.activatedAt) ? { activatedAt: now } : {}),
         ...(isApproval
           ? {
               agreementLocked: true,
@@ -92,6 +94,16 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       },
     });
 
+    if (isApproval) {
+      await logAudit({
+        userId: session.user.id,
+        userEmail: session.user.email ?? "unknown",
+        action: "clinic.approved",
+        target: clinic.name,
+        newValue: now.toISOString(),
+        ipAddress: ipFromRequest(req),
+      });
+    }
     if (input.status && input.status !== existing.status) {
       await logAudit({
         userId: session.user.id,
