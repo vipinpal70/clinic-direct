@@ -8,7 +8,7 @@ import { StatusPill } from "@/components/shared/status-pill";
 import { Button } from "@/components/ui/button";
 import { getClinicsWithStats } from "@/lib/stats";
 import { currency, dateFmt, displayClinicCode } from "@/lib/utils";
-import type { ClinicStatus } from "@/types";
+import { CLINIC_STATUS_LABEL, CLINIC_STATUS_TONE, ONBOARDING_STATUSES } from "@/lib/clinic-status";
 import { SendAgreementDialog } from "@/components/clinics/send-agreement-dialog";
 import { ClinicFilters } from "./clinic-filters";
 import { ImportExportButtons } from "./import-export-buttons";
@@ -16,12 +16,6 @@ import { ImportExportButtons } from "./import-export-buttons";
 export const metadata = { title: "Clinics" };
 export const dynamic = "force-dynamic";
 
-const statusTone: Record<ClinicStatus, "success" | "warning" | "destructive" | "muted"> = {
-  active: "success",
-  pending: "warning",
-  suspended: "destructive",
-  inactive: "muted",
-};
 
 interface Props {
   searchParams: Promise<{ search?: string; status?: string }>;
@@ -32,11 +26,15 @@ export default async function ClinicsPage({ searchParams }: Props) {
   const allClinics = await getClinicsWithStats();
 
   const active = allClinics.filter((c) => c.status === "active");
-  const pending = allClinics.filter((c) => c.status === "pending");
+  const pending = allClinics.filter((c) => (ONBOARDING_STATUSES as readonly string[]).includes(c.status));
   const totalRevenue = allClinics.reduce((a, c) => a + c.monthSales, 0);
 
   let clinics = allClinics;
-  if (status) clinics = clinics.filter((c) => c.status === status);
+  if (status) {
+    clinics = clinics.filter((c) =>
+      status === "in_progress" ? c.status === "in_progress" || c.status === "pending" : c.status === status,
+    );
+  }
   if (search) {
     const q = search.toLowerCase();
     clinics = clinics.filter(
@@ -65,7 +63,7 @@ export default async function ClinicsPage({ searchParams }: Props) {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <StatCard label="Total clinics" value={allClinics.length} hint="All registered" icon={<Building2 className="h-4 w-4" />} />
           <StatCard label="Active" value={active.length} hint="Generating orders" />
-          <StatCard label="Pending approval" value={pending.length} hint="Awaiting review" />
+          <StatCard label="Onboarding" value={pending.length} hint="New or in progress" />
           <StatCard label="Revenue MTD" value={currency(totalRevenue)} hint="Combined sales" />
         </div>
 
@@ -120,8 +118,8 @@ export default async function ClinicsPage({ searchParams }: Props) {
                     <td className="py-3 pr-4 font-mono text-xs">{c.clinicCode ?? "—"}</td>
                     <td className="py-3 pr-4 font-mono text-xs text-muted-foreground">{c.code}</td>
                     <td className="py-3">
-                      <StatusPill tone={statusTone[c.status]}>
-                        {c.status}
+                      <StatusPill tone={CLINIC_STATUS_TONE[c.status]}>
+                        {CLINIC_STATUS_LABEL[c.status]}
                       </StatusPill>
                     </td>
                     <td className="py-3 text-right tabular-nums">{c.ordersMtd}</td>

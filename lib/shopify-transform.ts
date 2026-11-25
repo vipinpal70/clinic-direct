@@ -60,7 +60,7 @@ export interface ShopifyOrder {
 // ─── Reduced records we persist ───────────────────────────────────
 
 export type ClinicTag = "clinic" | "client";
-export type ClinicStatus = "active" | "pending" | "suspended" | "inactive";
+export type ClinicStatus = "new" | "in_progress" | "active" | "suspended" | "inactive" | "pending";
 export type AgreementStatus = "not_sent" | "sent" | "viewed" | "accepted";
 export type OrderStatus =
   | "pending"
@@ -266,8 +266,11 @@ export function transformCustomer(customer: ShopifyCustomer): CustomerRecord {
     .join(" ");
   const name = fullName || parsed.businessName || "Unknown";
 
-  const status: ClinicStatus = customer.state === "enabled" ? "active" : "suspended";
-  const agreement: AgreementStatus = parsed.acceptedTerms ? "accepted" : "not_sent";
+  // Every Shopify customer starts as `new` with no agreement: a clinic only
+  // becomes active by signing on the consent page and being approved by an
+  // admin. Shopify's account state and "accepted terms" note are not used.
+  const status: ClinicStatus = "new";
+  const agreement: AgreementStatus = "not_sent";
   const address = parsed.address ?? formatAddress(customer.default_address);
   const joined = customer.created_at ? new Date(customer.created_at) : new Date();
 

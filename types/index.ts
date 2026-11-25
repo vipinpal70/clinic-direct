@@ -1,6 +1,6 @@
 /* ─── Enums ─────────────────────────────────────────────────── */
 
-export type ClinicStatus = "active" | "pending" | "suspended" | "inactive";
+export type ClinicStatus = "new" | "in_progress" | "active" | "suspended" | "inactive" | "pending";
 export type AgreementStatus = "not_sent" | "sent" | "viewed" | "accepted";
 export type ApprovalStage =
   | "created"
@@ -37,6 +37,7 @@ export interface Clinic {
   email: string;
   phone?: string;
   status: ClinicStatus;
+  activatedAt?: string | Date | null;
   agreement: AgreementStatus;
   commissionPct: number;
   joined?: string | Date | null;

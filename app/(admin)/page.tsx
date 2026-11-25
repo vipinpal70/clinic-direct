@@ -13,6 +13,7 @@ import { PageHeader, PageBody } from "@/components/shared/page-header";
 import { StatCard } from "@/components/shared/stat-card";
 import { SectionCard } from "@/components/shared/section-card";
 import { StatusPill } from "@/components/shared/status-pill";
+import { CLINIC_STATUS_LABEL, CLINIC_STATUS_TONE, isOnboarding } from "@/lib/clinic-status";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { RevenueChart, OrdersByProductChart } from "./dashboard-charts";
@@ -42,7 +43,7 @@ export default async function DashboardPage() {
     : "0.0";
 
   const latestClinics = clinics.slice(0, 5);
-  const pendingClinics = clinics.filter((c) => c.status === "pending");
+  const pendingClinics = clinics.filter((c) => isOnboarding(c.status));
 
   const integrationHealth = [
     {
@@ -72,7 +73,7 @@ export default async function DashboardPage() {
           <StatCard
             label="Active clinics"
             value={clinics.filter((c) => c.status === "active").length}
-            hint={`${pendingClinics.length} pending approval`}
+            hint={`${pendingClinics.length} onboarding`}
             icon={<Building2 className="h-4 w-4" />}
           />
           <StatCard
@@ -105,8 +106,8 @@ export default async function DashboardPage() {
           </SectionCard>
 
           <SectionCard
-            title="Pending approvals"
-            description={`${pendingClinics.length} clinics awaiting review`}
+            title="Onboarding clinics"
+            description={`${pendingClinics.length} new or in progress`}
             actions={
               <Button variant="ghost" size="sm" asChild>
                 <Link href="/approvals">
@@ -227,14 +228,9 @@ export default async function DashboardPage() {
                       {currency(c.monthSales)}
                     </div>
                     <StatusPill
-                      tone={
-                        c.status === "active" ? "success"
-                        : c.status === "pending" ? "warning"
-                        : c.status === "suspended" ? "destructive"
-                        : "muted"
-                      }
+                      tone={CLINIC_STATUS_TONE[c.status]}
                     >
-                      {c.status}
+                      {CLINIC_STATUS_LABEL[c.status]}
                     </StatusPill>
                   </div>
                 </Link>

@@ -69,8 +69,9 @@ export function AddClinicDialog() {
         <DialogHeader>
           <DialogTitle>Add clinic</DialogTitle>
           <DialogDescription>
-            Register a new clinic. It starts as pending until the agreement is
-            accepted and an admin approves it.
+            Register a new clinic. It starts as New, moves to In progress when
+            the agreement is sent, and becomes Active once the clinic signs and
+            an admin approves it.
           </DialogDescription>
         </DialogHeader>
         <form className="space-y-4" onSubmit={onSubmit}>

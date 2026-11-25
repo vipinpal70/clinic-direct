@@ -5,7 +5,9 @@ import { useState, useTransition } from "react";
 import { Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-const STATUSES = ["active", "pending", "suspended", "inactive"] as const;
+import { CLINIC_STATUSES, CLINIC_STATUS_LABEL } from "@/lib/clinic-status";
+
+const STATUSES = CLINIC_STATUSES;
 
 export function ClinicFilters() {
   const router = useRouter();
@@ -47,7 +49,7 @@ export function ClinicFilters() {
           size="sm"
           onClick={() => pushParams({ status: activeStatus === s ? null : s })}
         >
-          {s}
+          {CLINIC_STATUS_LABEL[s]}
         </Button>
       ))}
     </div>

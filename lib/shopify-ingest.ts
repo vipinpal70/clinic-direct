@@ -31,13 +31,34 @@ function isUniqueViolation(e: unknown): boolean {
 
 // ─── Customers ──────────────────────────────────────────────────
 
+/** A customer that was not stored, by Shopify id only — no personal data. */
+export interface SkippedCustomer {
+  shopifyCustomerId: string;
+  reason: string;
+}
+
 export interface CustomerIngestResult {
   total: number;
   clinicsCount: number;
-  clientsCount: number;
+  skippedCount: number;
   clinics: CustomerRecord[];
-  clients: CustomerRecord[];
+  skipped: SkippedCustomer[];
   errors: { code: string; error: string }[];
+}
+
+/**
+ * Only clinics are stored, and a customer is a clinic when its note carries a
+ * clinic code. Everyone else (patients, other shoppers) is skipped — unless
+ * this Shopify customer is already stored as a clinic, so a note edited later
+ * can't freeze an existing clinic's details.
+ */
+async function shouldStore(record: CustomerRecord): Promise<boolean> {
+  if (record.clinicCode) return true;
+  const existing = await prisma.clinic.findFirst({
+    where: { shopifyCustomerId: record.shopifyCustomerId },
+    select: { tag: true },
+  });
+  return existing?.tag === "clinic";
 }
 
 // Find the existing row for this Shopify customer. The stable shopifyCustomerId
@@ -80,8 +101,8 @@ interface UpsertResult {
 }
 
 // Mutable Shopify-sourced fields. Never touched here: `code` (permanent),
-// `agreement` (owned by the send / sign / approve flow — Shopify only seeds it on
-// create, so a webhook can't undo a signature), commissionPct and portal login.
+// `status` / `agreement` / `activatedAt` (owned by the send → sign → approve
+// flow; Shopify only seeds them on create), commissionPct and portal login.
 async function updateClinic(existing: ClinicRow, record: CustomerRecord): Promise<UpsertResult> {
   const codeConflict =
     record.clinicCode !== null && (await isClinicCodeTaken(record.clinicCode, existing.id));
@@ -99,7 +120,6 @@ async function updateClinic(existing: ClinicRow, record: CustomerRecord): Promis
       vatNumber: record.vatNumber,
       email: record.email,
       phone: record.phone,
-      status: record.status,
       address: record.address,
     },
   });
@@ -181,17 +201,25 @@ export async function ingestCustomers(
   source: IngestSource,
 ): Promise<CustomerIngestResult> {
   const clinics: CustomerRecord[] = [];
-  const clients: CustomerRecord[] = [];
+  const skipped: SkippedCustomer[] = [];
   const errors: { code: string; error: string }[] = [];
 
   for (const customer of raw) {
     const record = transformCustomer(customer);
     const wantedCode = record.clinicCode;
     try {
+      if (!(await shouldStore(record))) {
+        skipped.push({ shopifyCustomerId: record.shopifyCustomerId, reason: "No clinic code in the customer note" });
+        continue;
+      }
+      // Anything stored here is a clinic, whatever its Shopify tags say.
+      record.tag = "clinic";
       const { row, codeConflict } = await upsertCustomer(record);
       // Report what is actually stored, which can differ from the payload.
       record.code = row.code;
       record.clinicCode = row.clinicCode;
+      record.status = row.status;
+      record.agreement = row.agreement;
       record.tag = row.tag;
       if (codeConflict) {
         errors.push({
@@ -205,7 +233,7 @@ export async function ingestCustomers(
         error: error instanceof Error ? error.message : "Unknown error",
       });
     }
-    (record.tag === "clinic" ? clinics : clients).push(record);
+    clinics.push(record);
   }
 
   try {
@@ -227,9 +255,9 @@ export async function ingestCustomers(
   return {
     total: raw.length,
     clinicsCount: clinics.length,
-    clientsCount: clients.length,
+    skippedCount: skipped.length,
     clinics,
-    clients,
+    skipped,
     errors,
   };
 }

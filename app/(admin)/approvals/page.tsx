@@ -14,6 +14,7 @@ import { prisma } from "@/lib/prisma";
 import { detailsPath } from "@/lib/portal-token";
 import { dateFmt, displayClinicCode } from "@/lib/utils";
 import { ApproveButton } from "./approve-button";
+import { approvalBlocker, CLINIC_STATUS_LABEL, CLINIC_STATUS_TONE, ONBOARDING_STATUSES } from "@/lib/clinic-status";
 import { AgreementDialog } from "./agreement-dialog";
 
 export const metadata = { title: "Approvals" };
@@ -37,7 +38,7 @@ function getStageIndex(agreement: string): number {
 
 export default async function ApprovalsPage() {
   const pending = await prisma.clinic.findMany({
-    where: { status: "pending" },
+    where: { status: { in: [...ONBOARDING_STATUSES] } },
     orderBy: { joined: "desc" },
   });
 
@@ -45,7 +46,7 @@ export default async function ApprovalsPage() {
     <>
       <PageHeader
         title="Clinic approvals"
-        description="Track new clinics through the agreement and admin review pipeline. Commission is disabled until approval."
+        description="New clinics move to In progress when the agreement is sent, and become Active once the clinic has signed and an admin approves. Commission counts orders from the activation date."
       />
       <PageBody>
         {/* Workflow diagram */}
@@ -99,7 +100,10 @@ export default async function ApprovalsPage() {
                     {displayClinicCode(c)?.slice(-3)}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="font-medium">{c.name}</div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium">{c.name}</span>
+                      <StatusPill tone={CLINIC_STATUS_TONE[c.status]}>{CLINIC_STATUS_LABEL[c.status]}</StatusPill>
+                    </div>
                     <div className="text-xs text-muted-foreground">
                       {c.email} · Joined {dateFmt(c.joined)}
                     </div>
@@ -159,7 +163,7 @@ export default async function ApprovalsPage() {
                         c.emailSentAt ? c.emailSentAt.toISOString() : null
                       }
                     />
-                    <ApproveButton clinicId={c.id} disabled={c.agreement !== "accepted"} />
+                    <ApproveButton clinicId={c.id} blocker={approvalBlocker(c)} />
                   </div>
                 </div>
               );

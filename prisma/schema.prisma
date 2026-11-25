@@ -11,11 +11,17 @@ datasource db {
 
 // ─── Enums ────────────────────────────────────────────────────
 
+// Lifecycle: new → in_progress (agreement sent) → active (clinic signed + admin
+// approved). See lib/clinic-status.ts. `pending` is the legacy name for
+// "not yet approved", kept so old rows still load; prisma/migrate-clinic-status.ts
+// converts them.
 enum ClinicStatus {
+  new
+  in_progress
   active
-  pending
   suspended
   inactive
+  pending
 }
 
 // Distinguishes clinic records from individual client/patient records —
@@ -100,7 +106,8 @@ model Clinic {
   vatNumber       String?         // parsed from the Shopify customer note
   email           String
   phone           String?
-  status          ClinicStatus    @default(pending)
+  status          ClinicStatus    @default(new)
+  activatedAt     DateTime?       // first time the clinic became active (signed + admin approved); commission counts orders from here
   agreement       AgreementStatus @default(not_sent)
   commissionPct   Float           @default(12)
   joined          DateTime?       @default(now())

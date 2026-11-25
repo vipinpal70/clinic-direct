@@ -22,7 +22,7 @@ import { prisma } from "@/lib/prisma";
 import { detailsPath } from "@/lib/portal-token";
 import { getClinicWithStats } from "@/lib/stats";
 import { currency, dateFmt, relativeTime } from "@/lib/utils";
-import type { ClinicStatus } from "@/types";
+import { CLINIC_STATUS_LABEL, CLINIC_STATUS_TONE } from "@/lib/clinic-status";
 import { EditClinicDialog } from "./edit-clinic-dialog";
 import { AgreementPanel } from "./agreement-panel";
 import { SendAgreementDialog } from "@/components/clinics/send-agreement-dialog";
@@ -31,12 +31,6 @@ interface Props {
   params: Promise<{ id: string }>;
 }
 
-const statusTone: Record<ClinicStatus, "success" | "warning" | "destructive" | "muted"> = {
-  active: "success",
-  pending: "warning",
-  suspended: "destructive",
-  inactive: "muted",
-};
 
 export async function generateMetadata({ params }: Props) {
   const { id } = await params;
@@ -98,9 +92,15 @@ export default async function ClinicProfilePage({ params }: Props) {
       <PageBody>
         {/* Status + KPIs */}
         <div className="flex items-center gap-3 flex-wrap">
-          <StatusPill tone={statusTone[clinic.status]} className="text-sm px-3 py-1">
-            {clinic.status}
+          <StatusPill tone={CLINIC_STATUS_TONE[clinic.status]} className="text-sm px-3 py-1">
+            {CLINIC_STATUS_LABEL[clinic.status]}
           </StatusPill>
+          {clinic.activatedAt && (
+            <span className="text-xs text-muted-foreground">
+              Active since <strong>{dateFmt(clinic.activatedAt)}</strong>{" "}
+              {new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit" }).format(clinic.activatedAt)}
+            </span>
+          )}
           <StatusPill
             tone={
               clinic.agreement === "accepted"

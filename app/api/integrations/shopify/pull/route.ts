@@ -39,7 +39,7 @@ export async function POST(req: NextRequest) {
       customers?: {
         total: number;
         clinicsCount: number;
-        clientsCount: number;
+        skippedCount: number;
         errors: { code: string; error: string }[];
       };
       orders?: {
@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
       data.customers = {
         total: r.total,
         clinicsCount: r.clinicsCount,
-        clientsCount: r.clientsCount,
+        skippedCount: r.skippedCount,
         errors: r.errors,
       };
     }

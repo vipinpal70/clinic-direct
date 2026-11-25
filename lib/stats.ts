@@ -85,7 +85,7 @@ export async function getDashboardStats() {
     rangeOrders,
   ] = await Promise.all([
     prisma.clinic.count({ where: { status: "active" } }),
-    prisma.clinic.count({ where: { status: "pending" } }),
+    prisma.clinic.count({ where: { status: { in: ["new", "in_progress", "pending"] } } }),
     prisma.order.count({ where: { shopifyCreatedAt: { gte: monthStart, lt: monthEnd } } }),
     prisma.commission.aggregate({
       where: { status: "payable" },

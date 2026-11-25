@@ -5,6 +5,7 @@ import { requireSession, handleApiError, ApiError } from "@/lib/api-utils";
 import { logAudit, ipFromRequest } from "@/lib/audit";
 import { generateAgreementId, renderAgreementSnapshot } from "@/lib/agreement";
 import { sendAgreementEmail } from "@/lib/mailer";
+import { isOnboarding } from "@/lib/clinic-status";
 
 const sendSchema = z.object({
   commissionPct: z.number().min(0).max(100).optional(),
@@ -56,6 +57,9 @@ export async function POST(req: NextRequest, { params }: Params) {
       where: { id },
       data: {
         agreement: "sent",
+        // Sending moves an onboarding clinic to in_progress; suspended or
+        // inactive clinics keep their status.
+        ...(isOnboarding(clinic.status) ? { status: "in_progress" as const } : {}),
         agreementId,
         agreementSnapshot: snapshot,
         agreementCommissionPct: commissionPct,

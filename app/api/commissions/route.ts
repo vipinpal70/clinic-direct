@@ -37,7 +37,8 @@ export async function GET(req: NextRequest) {
 
 /**
  * Runs the commission calculation for a billing period: for every active
- * clinic, sums orders placed that month and upserts a Commission record.
+ * clinic, sums orders placed that month (from its activation date onwards) and
+ * upserts a Commission record.
  */
 export async function POST(req: NextRequest) {
   try {
@@ -52,10 +53,15 @@ export async function POST(req: NextRequest) {
     const results = [];
 
     for (const clinic of clinics) {
+      // Only orders placed once the clinic was active earn commission. Clinics
+      // activated before activatedAt existed have none and keep the old rule.
+      const from =
+        clinic.activatedAt && clinic.activatedAt > start ? clinic.activatedAt : start;
+      if (from >= end) continue;
       const orders = await prisma.order.findMany({
         where: {
           clinicId: clinic.id,
-          shopifyCreatedAt: { gte: start, lt: end },
+          shopifyCreatedAt: { gte: from, lt: end },
           status: { notIn: ["cancelled"] },
         },
       });

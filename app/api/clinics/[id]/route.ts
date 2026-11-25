@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getClinicWithStats } from "@/lib/stats";
 import { requireSession, handleApiError, ApiError } from "@/lib/api-utils";
 import { logAudit, ipFromRequest } from "@/lib/audit";
+import { approvalBlocker, CLINIC_STATUSES } from "@/lib/clinic-status";
 
 const updateClinicSchema = z.object({
   name: z.string().min(1).optional(),
@@ -13,7 +14,7 @@ const updateClinicSchema = z.object({
   website: z.string().url().optional().or(z.literal("")),
   commissionPct: z.number().min(0).max(100).optional(),
   notes: z.string().optional(),
-  status: z.enum(["active", "pending", "suspended", "inactive"]).optional(),
+  status: z.enum(CLINIC_STATUSES).optional(),
   agreement: z.enum(["not_sent", "sent", "viewed", "accepted"]).optional(),
 });
 
@@ -54,28 +55,36 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       );
     }
 
-    // Approval: pending → active requires an accepted agreement. On approval we
-    // lock the agreement and apply the rate that was offered on it.
-    const isApproval = input.status === "active" && existing.status === "pending";
-    if (isApproval) {
-      const agreementAfterUpdate = input.agreement ?? existing.agreement;
-      if (agreementAfterUpdate !== "accepted") {
-        throw new ApiError(
-          400,
-          "Clinic agreement must be accepted before approval",
-        );
+    // Becoming active needs the clinic's own signature plus this admin action.
+    // The first time is the approval: lock the agreement, apply the offered
+    // rate and stamp activatedAt. A previously approved clinic coming back from
+    // suspended / inactive keeps its original activatedAt.
+    const activating = input.status === "active" && existing.status !== "active";
+    if (activating) {
+      if (input.agreement !== undefined) {
+        throw new ApiError(400, "Approve the clinic separately from editing its agreement");
       }
+      const blocker = approvalBlocker(existing);
+      if (blocker) throw new ApiError(400, blocker);
     }
+    const isApproval = activating && !existing.agreementLocked;
+    const now = new Date();
 
     const clinic = await prisma.clinic.update({
-      where: { id },
+      where: {
+        id,
+        // Guard against the agreement being re-sent (clearing the signature)
+        // between our read and this write.
+        ...(isApproval ? { agreementLocked: false, agreementAcceptedAt: { not: null } } : {}),
+      },
       data: {
         ...input,
         website: input.website || undefined,
+        ...(activating && !existing.activatedAt ? { activatedAt: now } : {}),
         ...(isApproval
           ? {
               agreementLocked: true,
-              agreementApprovedAt: new Date(),
+              agreementApprovedAt: now,
               commissionPct:
                 existing.agreementCommissionPct ?? existing.commissionPct,
             }
