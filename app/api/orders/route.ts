@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { requireSession, handleApiError, paginationParams } from "@/lib/api-utils";
-import { resolveCommissionPct, computeCommission } from "@/lib/commission";
+import { requireSession, handleApiError, paginationParams, ApiError } from "@/lib/api-utils";
+import { orderCommission } from "@/lib/commission";
 
 const createOrderSchema = z.object({
   shopifyId: z.string().min(1),
@@ -11,8 +11,6 @@ const createOrderSchema = z.object({
   clinicId: z.string().min(1),
   total: z.number().positive(),
   items: z.number().int().positive().default(1),
-  customerName: z.string().optional(),
-  customerEmail: z.string().email().optional(),
   lineItems: z.unknown().optional(),
   shopifyCreatedAt: z.string().datetime().optional(),
   notes: z.string().optional(),
@@ -33,8 +31,6 @@ export async function GET(req: NextRequest) {
     if (search) {
       where.OR = [
         { number: { contains: search, mode: "insensitive" } },
-        { customerName: { contains: search, mode: "insensitive" } },
-        { customerEmail: { contains: search, mode: "insensitive" } },
       ];
     }
 
@@ -63,16 +59,19 @@ export async function POST(req: NextRequest) {
     await requireSession();
     const input = createOrderSchema.parse(await req.json());
 
-    const commissionPct = await resolveCommissionPct(input.clinicId);
-    const commission = computeCommission(input.total, commissionPct);
+    const clinic = await prisma.clinic.findUnique({
+      where: { id: input.clinicId },
+      select: { id: true, status: true, activatedAt: true },
+    });
+    if (!clinic) throw new ApiError(404, "Clinic not found");
+    const placedAt = input.shopifyCreatedAt ? new Date(input.shopifyCreatedAt) : new Date();
+    const { commissionPct, commission } = await orderCommission(clinic, input.total, placedAt);
 
     const order = await prisma.order.create({
       data: {
         ...input,
         lineItems: input.lineItems as Prisma.InputJsonValue | undefined,
-        shopifyCreatedAt: input.shopifyCreatedAt
-          ? new Date(input.shopifyCreatedAt)
-          : new Date(),
+        shopifyCreatedAt: placedAt,
         commissionPct,
         commission,
       },

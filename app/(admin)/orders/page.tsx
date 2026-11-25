@@ -37,7 +37,6 @@ export default async function OrdersPage({ searchParams }: Props) {
   if (search) {
     where.OR = [
       { number: { contains: search, mode: "insensitive" } },
-      { customerName: { contains: search, mode: "insensitive" } },
     ];
   }
 
@@ -103,7 +102,6 @@ export default async function OrdersPage({ searchParams }: Props) {
               <thead>
                 <tr className="text-left text-xs text-muted-foreground border-b border-border">
                   <th className="font-medium px-5 py-2.5">Order</th>
-                  <th className="font-medium py-2.5">Customer</th>
                   <th className="font-medium py-2.5">Clinic</th>
                   <th className="font-medium py-2.5">Items</th>
                   <th className="font-medium py-2.5 text-right">Total</th>
@@ -115,7 +113,7 @@ export default async function OrdersPage({ searchParams }: Props) {
               <tbody className="divide-y divide-border">
                 {orders.length === 0 && (
                   <tr>
-                    <td colSpan={8} className="py-12 text-center text-sm text-muted-foreground">
+                    <td colSpan={7} className="py-12 text-center text-sm text-muted-foreground">
                       No orders match your filters.
                     </td>
                   </tr>
@@ -127,7 +125,6 @@ export default async function OrdersPage({ searchParams }: Props) {
                         {o.number}
                       </span>
                     </td>
-                    <td className="py-2.5">{o.customerName ?? "—"}</td>
                     <td className="py-2.5">
                       <div className="text-xs font-medium">{displayClinicCode(o.clinic) ?? "N/A"}</div>
                       <div className="text-[11px] text-muted-foreground">

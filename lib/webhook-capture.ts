@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { checkShopifySignature } from "@/lib/webhook-auth";
+import { redactWebhookPayload } from "@/lib/pii";
 
 // Raw capture for inbound webhooks. Wrap a route's POST handler with
 // `withWebhookCapture(endpoint, handler)` and every request is stored in
@@ -17,8 +18,8 @@ export type { WebhookEndpoint, WebhookEventStatus } from "@/lib/webhook-constant
 
 /** MongoDB caps a document at 16 MB; keep well clear of it. */
 const MAX_PAYLOAD_CHARS = 8_000_000;
-/** How much of an unparseable / oversized body to keep. */
-const MAX_RAW_PREVIEW = 100_000;
+/** How much of an unparseable body to keep (it may hold personal data). */
+const MAX_RAW_PREVIEW = 1_000;
 /** Replies larger than this are summarised rather than stored whole. */
 const MAX_RESPONSE_CHARS = 50_000;
 const MAX_ERROR_CHARS = 4_000;
@@ -111,6 +112,9 @@ async function recordReceived(
 
   const tooLarge = rawBody.length > MAX_PAYLOAD_CHARS;
   const storeParsed = parsed && !tooLarge;
+  const topic = req.headers.get("x-shopify-topic");
+  // Patient (shopper) data is stripped before storing; clinics are kept in full.
+  if (storeParsed) payload = redactWebhookPayload(endpoint, topic, payload);
 
   const base = {
     endpoint,
@@ -129,7 +133,7 @@ async function recordReceived(
     status: "received" as WebhookEventStatus,
   };
 
-  const rawPreview = truncate(rawBody, MAX_RAW_PREVIEW);
+  const rawPreview = tooLarge ? "[body too large to store]" : truncate(rawBody, MAX_RAW_PREVIEW);
 
   try {
     const row = await prisma.webhookEvent.create({

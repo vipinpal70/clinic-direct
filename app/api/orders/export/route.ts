@@ -17,11 +17,11 @@ export async function GET() {
     });
 
     const header = [
-      "number", "clinic", "customer", "items", "total",
+      "number", "clinic", "items", "total",
       "commission", "status", "date",
     ];
     const rows = orders.map((o) => [
-      o.number, displayClinicCode(o.clinic) ?? "", o.customerName ?? "", o.items,
+      o.number, displayClinicCode(o.clinic) ?? "", o.items,
       o.total, o.commission, o.status,
       o.shopifyCreatedAt.toISOString().slice(0, 10),
     ]);

@@ -337,7 +337,6 @@ function OrderTable({ orders }: { orders: OrderRow[] }) {
         <thead>
           <tr className="text-left text-xs text-muted-foreground border-b border-border">
             <th className="font-medium px-5 py-2.5">Order</th>
-            <th className="font-medium py-2.5">Customer</th>
             <th className="font-medium py-2.5 text-right">Total</th>
             <th className="font-medium py-2.5 text-right">Commission</th>
             <th className="font-medium py-2.5">Status</th>
@@ -350,7 +349,6 @@ function OrderTable({ orders }: { orders: OrderRow[] }) {
               <td className="px-5 py-2.5 font-mono text-xs font-medium">
                 {o.number}
               </td>
-              <td className="py-2.5">{o.customerName ?? "—"}</td>
               <td className="py-2.5 text-right tabular-nums">{currency(o.total)}</td>
               <td className="py-2.5 text-right tabular-nums text-muted-foreground">
                 {currency(o.commission)}

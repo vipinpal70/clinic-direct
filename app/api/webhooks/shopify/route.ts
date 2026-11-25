@@ -1,136 +1,54 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { findClinicByCode } from "@/lib/clinic-code";
-import { resolveCommissionPct, computeCommission } from "@/lib/commission";
 import { rejectUnauthenticated } from "@/lib/webhook-auth";
 import { withWebhookCapture } from "@/lib/webhook-capture";
+import { ingestCustomers, ingestOrders } from "@/lib/shopify-ingest";
+import type { ShopifyCustomer, ShopifyOrder } from "@/lib/shopify-transform";
 
-interface ShopifyOrderPayload {
-  id: number;
-  name: string;
-  total_price: string;
-  customer?: { first_name?: string; last_name?: string; email?: string };
-  line_items: unknown[];
-  created_at: string;
-  cancelled_at?: string | null;
-  note_attributes?: { name: string; value: string }[];
-}
-
-// Every delivery (accepted or rejected) is captured raw in `webhook_events`
-// by withWebhookCapture — see lib/webhook-capture.ts.
+// POST /api/webhooks/shopify — Shopify's own topics, signature-checked.
+//   orders/*     → same handling as /api/webhooks/clinic-order-data: link the
+//                  order to a clinic by its clinic code and apply that clinic's
+//                  commission rate (from its activation date). No shopper
+//                  personal data is stored.
+//   customers/*  → same as /api/webhooks/clinic-data: store clinics only.
+//   anything else is acknowledged and ignored.
+// Every delivery is captured in Audit with patient data removed
+// (lib/webhook-capture.ts, lib/pii.ts).
 export const POST = withWebhookCapture("shopify", async (req: NextRequest, rawBody: string) => {
   const rejection = rejectUnauthenticated(req, rawBody);
   if (rejection) return rejection;
 
-  const topic = req.headers.get("x-shopify-topic") ?? "unknown";
+  const topic = req.headers.get("x-shopify-topic") ?? "";
 
-  let payload: ShopifyOrderPayload;
+  let payload: unknown;
   try {
     payload = JSON.parse(rawBody);
   } catch {
     return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
   }
-
-  const resourceId = String(payload.id ?? "unknown");
-  const existingLog = await prisma.webhookLog.findFirst({
-    where: { provider: "shopify", event: topic, resourceId },
-    orderBy: { createdAt: "desc" },
-  });
-
-  try {
-    await processShopifyOrder(topic, payload);
-
-    if (existingLog) {
-      await prisma.webhookLog.update({
-        where: { id: existingLog.id },
-        data: {
-          status: "success",
-          attempts: existingLog.attempts + 1,
-          processedAt: new Date(),
-          error: null,
-        },
-      });
-    } else {
-      await prisma.webhookLog.create({
-        data: {
-          provider: "shopify",
-          event: topic,
-          resourceId,
-          status: "success",
-          processedAt: new Date(),
-          payload: payload as never,
-        },
-      });
-    }
-
-    return NextResponse.json({ received: true });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown error";
-    if (existingLog) {
-      await prisma.webhookLog.update({
-        where: { id: existingLog.id },
-        data: {
-          status: "failed",
-          attempts: existingLog.attempts + 1,
-          error: message,
-        },
-      });
-    } else {
-      await prisma.webhookLog.create({
-        data: {
-          provider: "shopify",
-          event: topic,
-          resourceId,
-          status: "failed",
-          error: message,
-          payload: payload as never,
-        },
-      });
-    }
-    // Acknowledge receipt so Shopify doesn't hammer retries for data errors
-    // (e.g. an order with no recognisable clinic code) while still recording the failure.
-    return NextResponse.json({ received: true, warning: message });
+  if (!payload || typeof payload !== "object" || !("id" in payload)) {
+    return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
   }
+
+  // Shopify retries anything that isn't 2xx, so data problems (e.g. no clinic
+  // code) are acknowledged with a warning rather than an error status.
+  if (topic.startsWith("orders/")) {
+    const result = await ingestOrders([payload as ShopifyOrder], "webhook");
+    return NextResponse.json({
+      received: true,
+      linkedToClinic: result.withClinic === 1,
+      ...(result.errors.length ? { warning: result.errors[0].error } : {}),
+    });
+  }
+
+  if (topic.startsWith("customers/")) {
+    const result = await ingestCustomers([payload as ShopifyCustomer], "webhook");
+    return NextResponse.json({
+      received: true,
+      clinicsCount: result.clinicsCount,
+      skippedCount: result.skippedCount,
+      ...(result.errors.length ? { warning: result.errors[0].error } : {}),
+    });
+  }
+
+  return NextResponse.json({ received: true, ignored: `Topic ${topic || "(none)"} is not handled` });
 });
-
-async function processShopifyOrder(topic: string, payload: ShopifyOrderPayload) {
-  if (!topic.startsWith("orders/")) return;
-
-  const codeAttr = payload.note_attributes?.find((a) => a.name === "clinic_code");
-  if (!codeAttr) throw new Error("No clinic_code note attribute on order");
-
-  const clinic = await findClinicByCode(codeAttr.value);
-  if (!clinic) throw new Error(`Unknown clinic code: ${codeAttr.value}`);
-
-  const total = parseFloat(payload.total_price);
-  const commissionPct = await resolveCommissionPct(clinic.id);
-  const commission = computeCommission(total, commissionPct);
-  const status = payload.cancelled_at
-    ? "cancelled"
-    : topic === "orders/fulfilled"
-      ? "fulfilled"
-      : topic === "orders/create"
-        ? "pending"
-        : "processing";
-
-  await prisma.order.upsert({
-    where: { shopifyId: String(payload.id) },
-    create: {
-      shopifyId: String(payload.id),
-      number: payload.name,
-      clinicId: clinic.id,
-      status,
-      total,
-      items: payload.line_items.length,
-      customerName: [payload.customer?.first_name, payload.customer?.last_name]
-        .filter(Boolean)
-        .join(" "),
-      customerEmail: payload.customer?.email,
-      lineItems: payload.line_items as never,
-      shopifyCreatedAt: new Date(payload.created_at),
-      commissionPct,
-      commission,
-    },
-    update: { status, total, commissionPct, commission },
-  });
-}

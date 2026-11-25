@@ -38,7 +38,7 @@ export function OrderFilters({
       <div className="relative flex-1 min-w-[200px] max-w-sm">
         <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
         <input
-          placeholder="Search orders, customers…"
+          placeholder="Search order number…"
           className="h-8 w-full rounded-md border border-input bg-background pl-8 pr-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/40"
           value={search}
           onChange={(e) => {

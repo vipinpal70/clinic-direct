@@ -161,8 +161,9 @@ model Order {
   commission      Float
   commissionPct   Float
   items           Int         @default(1)
-  customerName    String?
-  customerEmail   String?
+  customerName    String?     // legacy — no longer written; patient data isn't kept (prisma/remove-patient-data.ts clears it)
+  customerEmail   String?     // legacy — as above
+  customerKey     String?     // hashed shopper email (lib/pii.ts), only to reuse their clinic code on later orders
   lineItems       Json?       // Raw Shopify line items
   refundAmount    Float?
   notes           String?
@@ -173,6 +174,7 @@ model Order {
   @@index([clinicId])
   @@index([status])
   @@index([shopifyCreatedAt])
+  @@index([customerKey])
   @@map("orders")
 }
 

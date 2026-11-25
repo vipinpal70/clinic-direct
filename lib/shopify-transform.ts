@@ -3,6 +3,8 @@
 // these are reused by the clinic-data / clinic-order-data webhooks and are safe
 // to unit-test or run offline against the LIST CUSTOMERS / LIST ORDERS dumps.
 
+import { customerKey } from "./pii";
+
 // ─── Shopify payload shapes (only the fields we read) ─────────────
 
 export interface ShopifyAddress {
@@ -107,8 +109,8 @@ export interface OrderRecord {
   status: OrderStatus;
   total: number;
   items: number;
-  customerName: string | null;
-  customerEmail: string | null;
+  /** Hashed shopper email — the shopper's name and email are not kept. */
+  customerKey: string | null;
   lineItems: { title: string; sku: string; quantity: number; price: string }[];
   shopifyCreatedAt: Date;
 }
@@ -328,12 +330,6 @@ export function deriveOrderStatus(order: ShopifyOrder): OrderStatus {
 /** Reduce a raw Shopify order to the lean record we store. */
 export function transformOrder(order: ShopifyOrder): OrderRecord {
   const customer = order.customer ?? undefined;
-  const customerName = customer
-    ? [customer.first_name, customer.last_name]
-        .map((p) => (p ?? "").trim())
-        .filter(Boolean)
-        .join(" ") || null
-    : null;
 
   const lineItems = (order.line_items ?? []).map((li) => ({
     title: li.title ?? li.name ?? "",
@@ -349,8 +345,7 @@ export function transformOrder(order: ShopifyOrder): OrderRecord {
     status: deriveOrderStatus(order),
     total: parseFloat(order.total_price ?? "0") || 0,
     items: order.line_items?.length ?? lineItems.length,
-    customerName,
-    customerEmail: order.email ?? order.contact_email ?? customer?.email ?? null,
+    customerKey: customerKey(order.email ?? order.contact_email ?? customer?.email),
     lineItems,
     shopifyCreatedAt: order.created_at ? new Date(order.created_at) : new Date(),
   };

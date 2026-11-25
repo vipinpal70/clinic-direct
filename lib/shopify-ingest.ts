@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { resolveCommissionPct, computeCommission } from "@/lib/commission";
+import { orderCommission } from "@/lib/commission";
 import { findClinicByCode, isClinicCodeTaken } from "@/lib/clinic-code";
 import { sendProfileCompletionEmail } from "@/lib/mailer";
 import {
@@ -245,7 +245,6 @@ export async function ingestCustomers(
         status: errors.length ? "failed" : "success",
         processedAt: new Date(),
         error: errors.length ? JSON.stringify(errors) : null,
-        payload: source === "webhook" ? (raw as never) : undefined,
       },
     });
   } catch {
@@ -271,12 +270,12 @@ export interface OrderIngestResult {
   errors: { shopifyId: string; error: string }[];
 }
 
-// Most recent prior order for this customer that resolved to a clinic — the
+// Most recent prior order for this shopper that resolved to a clinic — the
 // durable (cross-request) source for the sticky clinic code.
-async function lastCodeFromDb(email: string | null): Promise<string | null> {
-  if (!email) return null;
+async function lastCodeFromDb(key: string | null): Promise<string | null> {
+  if (!key) return null;
   const prior = await prisma.order.findFirst({
-    where: { customerEmail: email, clinicId: { not: null } },
+    where: { customerKey: key, clinicId: { not: null } },
     orderBy: { shopifyCreatedAt: "desc" },
     include: { clinic: true },
   });
@@ -292,8 +291,8 @@ async function upsertOrder(record: OrderRecord, code: string | null) {
     const clinic = await findClinicByCode(code);
     if (clinic) {
       clinicId = clinic.id;
-      commissionPct = await resolveCommissionPct(clinic.id);
-      commission = computeCommission(record.total, commissionPct);
+      // The clinic's rate, but only for orders placed once it was active.
+      ({ commissionPct, commission } = await orderCommission(clinic, record.total, record.shopifyCreatedAt));
     }
   }
 
@@ -311,8 +310,7 @@ async function upsertOrder(record: OrderRecord, code: string | null) {
       create: {
         shopifyId: record.shopifyId,
         number: record.number,
-        customerName: record.customerName,
-        customerEmail: record.customerEmail,
+        customerKey: record.customerKey,
         lineItems: record.lineItems as never,
         shopifyCreatedAt: record.shopifyCreatedAt,
         items: record.items,
@@ -343,28 +341,28 @@ export async function ingestOrders(
     .sort((a, b) => a.shopifyCreatedAt.getTime() - b.shopifyCreatedAt.getTime());
 
   const event = source === "webhook" ? "orders/ingest" : "orders/sync";
-  const lastCodeByEmail = new Map<string, string>();
+  const lastCodeByCustomer = new Map<string, string>();
   let withClinic = 0;
   let withoutClinic = 0;
   const errors: { shopifyId: string; error: string }[] = [];
 
   for (const record of records) {
-    const emailKey = record.customerEmail?.toLowerCase() ?? null;
+    const emailKey = record.customerKey;
 
     // Own code wins and refreshes the sticky map; otherwise fall back to the
     // customer's last-used code (in-batch, then durable DB lookup).
     let code = record.clinicCode;
     if (code && emailKey) {
-      lastCodeByEmail.set(emailKey, code);
+      lastCodeByCustomer.set(emailKey, code);
     } else if (!code && emailKey) {
-      code = lastCodeByEmail.get(emailKey) ?? (await lastCodeFromDb(emailKey));
+      code = lastCodeByCustomer.get(emailKey) ?? (await lastCodeFromDb(emailKey));
     }
 
     try {
       const { clinicId } = await upsertOrder(record, code);
       if (clinicId) {
         withClinic++;
-        if (emailKey && code) lastCodeByEmail.set(emailKey, code);
+        if (emailKey && code) lastCodeByCustomer.set(emailKey, code);
       } else {
         withoutClinic++;
       }
